@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "item": "minecraft.obsidian"
+    },
+    "B": {
+      "item": "diamond_block"
+    },
+    "C": {
+      "item": "golden_apple"
+    }
+  },
+  "pattern": [
+    "ABA",
+    "BCB",
+    "ABA"
+  ],
+  "result": {
+    "count": 1,
+    "id": "mineciv:monument"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "item.mineciv.alexandrite": "Alexandrite Gem",
+  "item.mineciv.raw_alexandrite": "Raw Alexandrite",
+
+  "block.mineciv.alexandrite_block": "Block of Alexandrite",
+  "block.mineciv.raw_alexandrite_block": "Block of Raw Alexandrite",
+  "block.mineciv.alexandrite_ore": "Alexandrite Ore",
+  "block.mineciv.alexandrite_deepslate_ore": "Alexandrite Deepslate Ore",
+  "block.mineciv.monument": "Monument",
+
+  "creativetab.mineciv.alexandrite_items": "Alexandrite Items",
+  "creativetab.mineciv.alexandrite_blocks": "Alexandrite Blocks"
+}
