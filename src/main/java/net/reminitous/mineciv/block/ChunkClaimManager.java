@@ -10,9 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class ChunkClaimManager extends SavedData {
     private static final String DATA_NAME = "mineciv_chunk_claims";
@@ -20,13 +18,18 @@ public class ChunkClaimManager extends SavedData {
     // Map of chunk coordinates to claim data: "chunkX,chunkZ" -> ClaimData
     private final Map<String, ClaimData> claims = new HashMap<>();
 
+    // Map of player UUID to the chunk owner they have access to
+    private final Map<UUID, UUID> playerAccessMap = new HashMap<>();
+
     public static class ClaimData {
         public UUID ownerUUID;
         public BlockPos monumentPos;
+        public Set<UUID> allowedPlayers;
 
         public ClaimData(UUID ownerUUID, BlockPos monumentPos) {
             this.ownerUUID = ownerUUID;
             this.monumentPos = monumentPos;
+            this.allowedPlayers = new HashSet<>();
         }
     }
 
@@ -47,7 +50,26 @@ public class ChunkClaimManager extends SavedData {
                     claimTag.getInt("monumentY"),
                     claimTag.getInt("monumentZ")
             );
-            manager.claims.put(key, new ClaimData(ownerUUID, monumentPos));
+
+            ClaimData claimData = new ClaimData(ownerUUID, monumentPos);
+
+            // Load allowed players
+            ListTag allowedPlayersList = claimTag.getList("allowedPlayers", Tag.TAG_INT_ARRAY);
+            for (int j = 0; j < allowedPlayersList.size(); j++) {
+                UUID playerUUID = allowedPlayersList.getUUID(j);
+                claimData.allowedPlayers.add(playerUUID);
+            }
+
+            manager.claims.put(key, claimData);
+        }
+
+        // Load player access map
+        ListTag accessMapList = tag.getList("playerAccessMap", Tag.TAG_COMPOUND);
+        for (int i = 0; i < accessMapList.size(); i++) {
+            CompoundTag accessTag = accessMapList.getCompound(i);
+            UUID playerUUID = accessTag.getUUID("player");
+            UUID ownerUUID = accessTag.getUUID("owner");
+            manager.playerAccessMap.put(playerUUID, ownerUUID);
         }
 
         return manager;
@@ -64,10 +86,29 @@ public class ChunkClaimManager extends SavedData {
             claimTag.putInt("monumentX", entry.getValue().monumentPos.getX());
             claimTag.putInt("monumentY", entry.getValue().monumentPos.getY());
             claimTag.putInt("monumentZ", entry.getValue().monumentPos.getZ());
+
+            // Save allowed players
+            ListTag allowedPlayersList = new ListTag();
+            for (UUID playerUUID : entry.getValue().allowedPlayers) {
+                allowedPlayersList.add(Tag.valueOf(playerUUID));
+            }
+            claimTag.put("allowedPlayers", allowedPlayersList);
+
             claimsList.add(claimTag);
         }
 
         tag.put("claims", claimsList);
+
+        // Save player access map
+        ListTag accessMapList = new ListTag();
+        for (Map.Entry<UUID, UUID> entry : playerAccessMap.entrySet()) {
+            CompoundTag accessTag = new CompoundTag();
+            accessTag.putUUID("player", entry.getKey());
+            accessTag.putUUID("owner", entry.getValue());
+            accessMapList.add(accessTag);
+        }
+        tag.put("playerAccessMap", accessMapList);
+
         return tag;
     }
 
@@ -106,6 +147,11 @@ public class ChunkClaimManager extends SavedData {
 
         ClaimData claim = manager.claims.get(key);
         if (claim != null && claim.monumentPos.equals(monumentPos)) {
+            // Remove all players' access to this chunk
+            for (UUID playerUUID : claim.allowedPlayers) {
+                manager.playerAccessMap.remove(playerUUID);
+            }
+
             manager.claims.remove(key);
             manager.setDirty();
         }
@@ -118,5 +164,69 @@ public class ChunkClaimManager extends SavedData {
 
     public static boolean isChunkClaimed(Level level, int chunkX, int chunkZ) {
         return getClaim(level, chunkX, chunkZ) != null;
+    }
+
+    public static boolean canPlayerEdit(Level level, int chunkX, int chunkZ, UUID playerUUID) {
+        ClaimData claim = getClaim(level, chunkX, chunkZ);
+        if (claim == null) {
+            return true; // Unclaimed chunks can be edited by anyone
+        }
+
+        // Owner can always edit
+        if (claim.ownerUUID.equals(playerUUID)) {
+            return true;
+        }
+
+        // Check if player is allowed
+        return claim.allowedPlayers.contains(playerUUID);
+    }
+
+    public static boolean addPlayerAccess(Level level, int chunkX, int chunkZ, UUID playerUUID) {
+        ChunkClaimManager manager = get(level);
+        ClaimData claim = getClaim(level, chunkX, chunkZ);
+
+        if (claim == null) {
+            return false;
+        }
+
+        // Check if player already has access to another owner's chunks
+        UUID currentOwner = manager.playerAccessMap.get(playerUUID);
+        if (currentOwner != null && !currentOwner.equals(claim.ownerUUID)) {
+            return false; // Player already has access to another owner's chunks
+        }
+
+        // Don't allow owner to add themselves
+        if (claim.ownerUUID.equals(playerUUID)) {
+            return false;
+        }
+
+        claim.allowedPlayers.add(playerUUID);
+        manager.playerAccessMap.put(playerUUID, claim.ownerUUID);
+        manager.setDirty();
+        return true;
+    }
+
+    public static boolean removePlayerAccess(Level level, int chunkX, int chunkZ, UUID playerUUID) {
+        ChunkClaimManager manager = get(level);
+        ClaimData claim = getClaim(level, chunkX, chunkZ);
+
+        if (claim == null) {
+            return false;
+        }
+
+        boolean removed = claim.allowedPlayers.remove(playerUUID);
+        if (removed) {
+            manager.playerAccessMap.remove(playerUUID);
+            manager.setDirty();
+        }
+        return removed;
+    }
+
+    public static Set<UUID> getAllowedPlayers(Level level, int chunkX, int chunkZ) {
+        ClaimData claim = getClaim(level, chunkX, chunkZ);
+        if (claim == null) {
+            return new HashSet<>();
+        }
+        return new HashSet<>(claim.allowedPlayers);
     }
 }

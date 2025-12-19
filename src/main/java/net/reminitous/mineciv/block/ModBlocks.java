@@ -2,8 +2,11 @@ package net.reminitous.mineciv.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.valueproviders.UniformInt;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -14,12 +17,14 @@ import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
 import net.reminitous.mineciv.MineCiv;
 import net.reminitous.mineciv.item.ModItems;
+import net.reminitous.mineciv.screen.MonumentMenu;
 
 import javax.annotation.Nullable;
 import java.util.function.Supplier;
@@ -53,6 +58,26 @@ public class ModBlocks {
                     .mapColor(MapColor.STONE)
                     .strength(50.0f, 1200.0F)
                     .requiresCorrectToolForDrops());
+        }
+
+        @Override
+        public InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+            if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+                int chunkX = pos.getX() >> 4;
+                int chunkZ = pos.getZ() >> 4;
+
+                ChunkClaimManager.ClaimData claim = ChunkClaimManager.getClaim(level, chunkX, chunkZ);
+
+                if (claim != null && claim.ownerUUID.equals(player.getUUID())) {
+                    // Open the monument management GUI
+                    serverPlayer.openMenu(new MonumentMenu.MonumentMenuProvider(pos), pos);
+                    return InteractionResult.SUCCESS;
+                } else if (claim != null) {
+                    player.sendSystemMessage(Component.literal("You don't own this monument!"));
+                    return InteractionResult.FAIL;
+                }
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide);
         }
 
         @Override
