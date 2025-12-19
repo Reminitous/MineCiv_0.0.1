@@ -26,6 +26,13 @@ public class MonumentMenu extends AbstractContainerMenu {
     public static final DeferredRegister<MenuType<?>> MENUS =
             DeferredRegister.create(ForgeRegistries.MENU_TYPES, MineCiv.MOD_ID);
 
+    @Override
+    public net.minecraft.world.item.ItemStack quickMoveStack(Player player, int index) {
+        // Return empty stack for now
+        return net.minecraft.world.item.ItemStack.EMPTY;
+    }
+
+
     public static final RegistryObject<MenuType<MonumentMenu>> MONUMENT_MENU = MENUS.register("monument_menu",
             () -> IForgeMenuType.create((windowId, inv, data) -> {
                 BlockPos pos = data.readBlockPos();

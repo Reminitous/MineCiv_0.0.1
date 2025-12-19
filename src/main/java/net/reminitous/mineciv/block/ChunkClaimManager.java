@@ -6,9 +6,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.nbt.NbtUtils;
 
 import java.util.*;
 
@@ -54,9 +55,9 @@ public class ChunkClaimManager extends SavedData {
             ClaimData claimData = new ClaimData(ownerUUID, monumentPos);
 
             // Load allowed players
-            ListTag allowedPlayersList = claimTag.getList("allowedPlayers", Tag.TAG_INT_ARRAY);
+            ListTag allowedPlayersList = claimTag.getList("allowedPlayers", Tag.TAG_COMPOUND);
             for (int j = 0; j < allowedPlayersList.size(); j++) {
-                UUID playerUUID = allowedPlayersList.getUUID(j);
+                UUID playerUUID = NbtUtils.loadUUID(allowedPlayersList.get(j));
                 claimData.allowedPlayers.add(playerUUID);
             }
 
@@ -90,7 +91,8 @@ public class ChunkClaimManager extends SavedData {
             // Save allowed players
             ListTag allowedPlayersList = new ListTag();
             for (UUID playerUUID : entry.getValue().allowedPlayers) {
-                allowedPlayersList.add(Tag.valueOf(playerUUID));
+                allowedPlayersList.add(NbtUtils.createUUID(playerUUID));
+
             }
             claimTag.put("allowedPlayers", allowedPlayersList);
 
@@ -112,7 +114,7 @@ public class ChunkClaimManager extends SavedData {
         return tag;
     }
 
-    private static ChunkClaimManager get(Level level) {
+    private static ChunkClaimManager get(LevelAccessor level) {
         if (!(level instanceof ServerLevel serverLevel)) {
             throw new IllegalStateException("Cannot access ChunkClaimManager on client side!");
         }
@@ -128,7 +130,7 @@ public class ChunkClaimManager extends SavedData {
         );
     }
 
-    public static boolean claimChunk(Level level, int chunkX, int chunkZ, UUID ownerUUID, BlockPos monumentPos) {
+    public static boolean claimChunk(LevelAccessor level, int chunkX, int chunkZ, UUID ownerUUID, BlockPos monumentPos) {
         ChunkClaimManager manager = get(level);
         String key = chunkX + "," + chunkZ;
 
@@ -141,7 +143,7 @@ public class ChunkClaimManager extends SavedData {
         return true;
     }
 
-    public static void unclaimChunk(Level level, int chunkX, int chunkZ, BlockPos monumentPos) {
+    public static void unclaimChunk(LevelAccessor level, int chunkX, int chunkZ, BlockPos monumentPos) {
         ChunkClaimManager manager = get(level);
         String key = chunkX + "," + chunkZ;
 
@@ -157,16 +159,16 @@ public class ChunkClaimManager extends SavedData {
         }
     }
 
-    public static ClaimData getClaim(Level level, int chunkX, int chunkZ) {
+    public static ClaimData getClaim(LevelAccessor level, int chunkX, int chunkZ) {
         ChunkClaimManager manager = get(level);
         return manager.claims.get(chunkX + "," + chunkZ);
     }
 
-    public static boolean isChunkClaimed(Level level, int chunkX, int chunkZ) {
+    public static boolean isChunkClaimed(LevelAccessor level, int chunkX, int chunkZ) {
         return getClaim(level, chunkX, chunkZ) != null;
     }
 
-    public static boolean canPlayerEdit(Level level, int chunkX, int chunkZ, UUID playerUUID) {
+    public static boolean canPlayerEdit(LevelAccessor level, int chunkX, int chunkZ, UUID playerUUID) {
         ClaimData claim = getClaim(level, chunkX, chunkZ);
         if (claim == null) {
             return true; // Unclaimed chunks can be edited by anyone
@@ -181,7 +183,7 @@ public class ChunkClaimManager extends SavedData {
         return claim.allowedPlayers.contains(playerUUID);
     }
 
-    public static boolean addPlayerAccess(Level level, int chunkX, int chunkZ, UUID playerUUID) {
+    public static boolean addPlayerAccess(LevelAccessor level, int chunkX, int chunkZ, UUID playerUUID) {
         ChunkClaimManager manager = get(level);
         ClaimData claim = getClaim(level, chunkX, chunkZ);
 
@@ -206,7 +208,7 @@ public class ChunkClaimManager extends SavedData {
         return true;
     }
 
-    public static boolean removePlayerAccess(Level level, int chunkX, int chunkZ, UUID playerUUID) {
+    public static boolean removePlayerAccess(LevelAccessor level, int chunkX, int chunkZ, UUID playerUUID) {
         ChunkClaimManager manager = get(level);
         ClaimData claim = getClaim(level, chunkX, chunkZ);
 
@@ -222,7 +224,7 @@ public class ChunkClaimManager extends SavedData {
         return removed;
     }
 
-    public static Set<UUID> getAllowedPlayers(Level level, int chunkX, int chunkZ) {
+    public static Set<UUID> getAllowedPlayers(LevelAccessor level, int chunkX, int chunkZ) {
         ClaimData claim = getClaim(level, chunkX, chunkZ);
         if (claim == null) {
             return new HashSet<>();

@@ -69,19 +69,6 @@ public class MineCiv {
     }
 
     @SubscribeEvent
-    public void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (event.getLevel().isClientSide()) return;
-
-        int chunkX = event.getPos().getX() >> 4;
-        int chunkZ = event.getPos().getZ() >> 4;
-
-        if (!ChunkClaimManager.canPlayerEdit(event.getLevel(), chunkX, chunkZ, event.getPlayer().getUUID())) {
-            event.setCanceled(true);
-            event.getPlayer().sendSystemMessage(Component.literal("You cannot break blocks in this claimed chunk!"));
-        }
-    }
-
-    @SubscribeEvent
     public void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
         if (event.getLevel().isClientSide()) return;
 
@@ -108,6 +95,18 @@ public class MineCiv {
             event.enqueueWork(() -> {
                 MenuScreens.register(MonumentMenu.MONUMENT_MENU.get(), MonumentScreen::new);
             });
+        }
+    }
+    @SubscribeEvent
+    public void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getLevel().isClientSide()) return;
+
+        int chunkX = event.getPos().getX() >> 4;
+        int chunkZ = event.getPos().getZ() >> 4;
+
+        if (!ChunkClaimManager.canPlayerEdit(event.getLevel(), chunkX, chunkZ, event.getPlayer().getUUID())) {
+            event.setCanceled(true);
+            event.getPlayer().sendSystemMessage(Component.literal("You cannot break blocks in this claimed chunk!"));
         }
     }
 }

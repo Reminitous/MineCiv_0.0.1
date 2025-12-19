@@ -20,7 +20,7 @@ public class ModMessages {
 
     public static void register() {
         SimpleChannel net = NetworkRegistry.ChannelBuilder
-                .named(ResourceLocation.fromNamespaceAndPath(MineCiv.MOD_ID, "messages"))
+                .named(new ResourceLocation(MineCiv.MOD_ID, "messages"))
                 .networkProtocolVersion(() -> "1.0")
                 .clientAcceptedVersions(s -> true)
                 .serverAcceptedVersions(s -> true)

@@ -61,7 +61,7 @@ public class ModBlocks {
         }
 
         @Override
-        public InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
             if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
                 int chunkX = pos.getX() >> 4;
                 int chunkZ = pos.getZ() >> 4;
@@ -69,7 +69,6 @@ public class ModBlocks {
                 ChunkClaimManager.ClaimData claim = ChunkClaimManager.getClaim(level, chunkX, chunkZ);
 
                 if (claim != null && claim.ownerUUID.equals(player.getUUID())) {
-                    // Open the monument management GUI
                     serverPlayer.openMenu(new MonumentMenu.MonumentMenuProvider(pos), pos);
                     return InteractionResult.SUCCESS;
                 } else if (claim != null) {
