@@ -3,13 +3,13 @@
   "category": "misc",
   "key": {
     "A": {
-      "item": "minecraft.obsidian"
+      "item": "minecraft:obsidian"
     },
     "B": {
-      "item": "diamond_block"
+      "item": "minecraft:diamond_block"
     },
     "C": {
-      "item": "golden_apple"
+      "item": "minecraft:golden_apple"
     }
   },
   "pattern": [

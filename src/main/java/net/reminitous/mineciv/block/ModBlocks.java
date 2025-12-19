@@ -1,6 +1,5 @@
 package net.reminitous.mineciv.block;
 
-import com.mojang.blaze3d.shaders.Uniform;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.valueproviders.UniformInt;
@@ -32,6 +31,7 @@ public class ModBlocks {
     public static final RegistryObject<Block> ALEXANDRITE_BLOCK = registerBlock("alexandrite_block",
             () -> new Block(BlockBehaviour.Properties.of()
                     .strength(4f).requiresCorrectToolForDrops().sound(SoundType.AMETHYST)));
+
     public static final RegistryObject<Block> RAW_ALEXANDRITE_BLOCK = registerBlock("raw_alexandrite_block",
             () -> new Block(BlockBehaviour.Properties.of()
                     .strength(3f).requiresCorrectToolForDrops()));
@@ -39,17 +39,16 @@ public class ModBlocks {
     public static final RegistryObject<Block> ALEXANDRITE_ORE = registerBlock("alexandrite_ore",
             () -> new DropExperienceBlock(UniformInt.of(2,4), BlockBehaviour.Properties.of()
                     .strength(4f).requiresCorrectToolForDrops()));
+
     public static final RegistryObject<Block> ALEXANDRITE_DEEPSLATE_ORE = registerBlock("alexandrite_deepslate_ore",
             () -> new DropExperienceBlock(UniformInt.of(3, 6),BlockBehaviour.Properties.of()
                     .strength(5f).requiresCorrectToolForDrops().sound(SoundType.DEEPSLATE)));
-    public static final RegistryObject<Block> MONUMENT_BLOCK = registerBlock("monument",
-            () -> new DropExperienceBlock(UniformInt.of(2,4), BlockBehaviour.Properties.of()
-                    .mapColor(MapColor.STONE)
-                    .strength(50,1200F)
-                    .requiresCorrectToolForDrops()));
 
-    public class MonumentBlock extends Block {
-        public MonumentBlock () {
+    public static final RegistryObject<Block> MONUMENT_BLOCK = registerBlock("monument",
+            () -> new MonumentBlock());
+
+    public static class MonumentBlock extends Block {
+        public MonumentBlock() {
             super(Properties.of()
                     .mapColor(MapColor.STONE)
                     .strength(50.0f, 1200.0F)
@@ -70,6 +69,8 @@ public class ModBlocks {
 
                 if (claimed) {
                     placer.sendSystemMessage(Component.literal("Chunk claimed at [" + chunkX + ", " + chunkZ + "]"));
+                } else {
+                    placer.sendSystemMessage(Component.literal("Chunk already claimed! Monument removed."));
                     // Remove the block if claim failed
                     level.destroyBlock(pos, true);
                 }
@@ -77,7 +78,7 @@ public class ModBlocks {
         }
 
         @Override
-        public void onRemove (BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
+        public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
             if (!level.isClientSide && state.getBlock() != newState.getBlock()) {
                 int chunkX = pos.getX() >> 4;
                 int chunkZ = pos.getZ() >> 4;
