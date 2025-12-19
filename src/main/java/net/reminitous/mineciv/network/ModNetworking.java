@@ -1,16 +1,20 @@
-import net.minecraftforge.network.SimpleChannel
+package net.reminitous.mineciv.network;
+
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.SimpleChannel;
 
 public class ModNetworking {
 
     private static final String PROTOCOL_VERSION = "1";
 
     public static final SimpleChannel CHANNEL =
-            NetworkRegistry.ChannelBuilder
-                    .named(new ResourceLocation("yourmodid", "main"))
-                    .networkProtocolVersion(() -> PROTOCOL_VERSION)
-                    .clientAcceptedVersions(PROTOCOL_VERSION::equals)
-                    .serverAcceptedVersions(PROTOCOL_VERSION::equals)
-                    .simpleChannel();
+            NetworkRegistry.SimpleChannel(
+                    new ResourceLocation("yourmodid", "main"),
+                    () -> PROTOCOL_VERSION,
+                    PROTOCOL_VERSION::equals,
+                    PROTOCOL_VERSION::equals
+            );
 
     public static void register() {
         // register packets here
