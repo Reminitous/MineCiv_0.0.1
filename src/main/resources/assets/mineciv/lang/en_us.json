@@ -9,5 +9,7 @@
   "block.mineciv.monument": "Monument",
 
   "creativetab.mineciv.alexandrite_items": "Alexandrite Items",
-  "creativetab.mineciv.alexandrite_blocks": "Alexandrite Blocks"
+  "creativetab.mineciv.alexandrite_blocks": "Alexandrite Blocks",
+
+  "entity.minecraft.villager.mineciv.cultivator": "Cultivator"
 }

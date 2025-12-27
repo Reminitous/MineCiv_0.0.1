@@ -1,0 +1,9 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "mineciv:kaupen_poi",
+      "required": false
+    }
+  ]
+}

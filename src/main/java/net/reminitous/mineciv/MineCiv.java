@@ -1,10 +1,8 @@
 package net.reminitous.mineciv;
 
 import com.mojang.logging.LogUtils;
-import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTabs;
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -13,17 +11,15 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.reminitous.mineciv.block.ChunkClaimManager;
 import net.reminitous.mineciv.block.ModBlocks;
 import net.reminitous.mineciv.item.ModCreativeModeTabs;
 import net.reminitous.mineciv.item.ModItems;
-import net.reminitous.mineciv.network.ModMessages;
 import net.reminitous.mineciv.screen.MonumentMenu;
-import net.reminitous.mineciv.screen.MonumentScreen;
+import net.reminitous.mineciv.villager.ModVillagers;
 import org.slf4j.Logger;
+import net.reminitous.mineciv.block.entity.ModBlockEntities;
 
 @Mod(MineCiv.MOD_ID)
 public class MineCiv {
@@ -32,22 +28,17 @@ public class MineCiv {
 
     public MineCiv(FMLJavaModLoadingContext context) {
         IEventBus modEventBus = context.getModEventBus();
-        modEventBus.addListener(this::commonSetup);
         MinecraftForge.EVENT_BUS.register(this);
 
         ModCreativeModeTabs.register(modEventBus);
         ModItems.register(modEventBus);
         ModBlocks.register(modEventBus);
         MonumentMenu.register(modEventBus);
+        ModVillagers.register(modEventBus);
+        ModBlockEntities.register(modEventBus);
 
         modEventBus.addListener(this::addCreative);
         context.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
-    }
-
-    private void commonSetup(final FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> {
-            ModMessages.register();
-        });
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
@@ -88,15 +79,6 @@ public class MineCiv {
         }
     }
 
-    @Mod.EventBusSubscriber(modid = MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
-    public static class ClientModEvents {
-        @SubscribeEvent
-        public static void onClientSetup(FMLClientSetupEvent event) {
-            event.enqueueWork(() -> {
-                MenuScreens.register(MonumentMenu.MONUMENT_MENU.get(), MonumentScreen::new);
-            });
-        }
-    }
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
         if (event.getLevel().isClientSide()) return;
