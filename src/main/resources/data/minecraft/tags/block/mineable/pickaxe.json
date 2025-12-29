@@ -1,9 +1,6 @@
 {
   "replace": false,
   "values": [
-    "mineciv:alexandrite_block",
-    "mineciv:raw_alexandrite_block",
-    "mineciv:alexandrite_ore",
-    "mineciv:alexandrite_deepslate_ore"
+    "mineciv:monument"
   ]
 }
