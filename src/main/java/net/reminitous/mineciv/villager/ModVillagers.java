@@ -19,13 +19,13 @@ public class ModVillagers {
     public static final DeferredRegister<VillagerProfession> VILLAGER_PROFESSIONS =
             DeferredRegister.create(ForgeRegistries.VILLAGER_PROFESSIONS, MineCiv.MOD_ID);
 
-    public static final RegistryObject<PoiType> KAUPEN_POI = POI_TYPES.register("kaupen_poi",
+    public static final RegistryObject<PoiType> VILLAGER_POI = POI_TYPES.register("kaupen_poi",
             () -> new PoiType(ImmutableSet.copyOf(ModBlocks.MONUMENT_BLOCK.get().getStateDefinition().getPossibleStates()),
                     10,16));
 
     public static final RegistryObject<VillagerProfession> CULTIVATOR = VILLAGER_PROFESSIONS.register("cultivator",
-            () -> new VillagerProfession("cultivator", holder -> holder.value() == KAUPEN_POI.get(),
-                    holder -> holder.value() == KAUPEN_POI.get(), ImmutableSet.of(Items.WHEAT,
+            () -> new VillagerProfession("cultivator", holder -> holder.value() == VILLAGER_POI.get(),
+                    holder -> holder.value() == VILLAGER_POI.get(), ImmutableSet.of(Items.WHEAT,
                     Items.WHEAT_SEEDS, Items.BEETROOT_SEEDS, Items.BONE_MEAL, Items.PUMPKIN_SEEDS, Items.MELON_SEEDS,Items.APPLE,
                     Items.MELON_SLICE, Items.CARROT, Items.POTATO, Items.SWEET_BERRIES, Items.BEETROOT, Items.GLOW_BERRIES),
                     ImmutableSet.of(Blocks.FARMLAND), SoundEvents.VILLAGER_WORK_FARMER));
