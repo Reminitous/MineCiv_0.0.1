@@ -31,6 +31,7 @@ import net.reminitous.mineciv.MineCiv;
 import net.reminitous.mineciv.block.entity.MonumentBlockEntity;
 import net.reminitous.mineciv.item.ModItems;
 import net.reminitous.mineciv.screen.MonumentMenu;
+import net.minecraft.world.level.block.RenderShape;
 
 import javax.annotation.Nullable;
 import java.util.function.Supplier;
@@ -164,6 +165,11 @@ public class ModBlocks {
             }
             super.onRemove(state, level, pos, newState, isMoving);
         }
+        @Override
+        public RenderShape getRenderShape(BlockState state) {
+            return RenderShape.MODEL;
+        }
+
     }
 
     private static <T extends Block> RegistryObject<T> registerBlock(String name, Supplier<T> block) {

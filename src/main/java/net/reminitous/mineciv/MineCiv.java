@@ -20,6 +20,7 @@ import net.reminitous.mineciv.screen.MonumentMenu;
 import net.reminitous.mineciv.villager.ModVillagers;
 import org.slf4j.Logger;
 import net.reminitous.mineciv.block.entity.ModBlockEntities;
+import net.reminitous.mineciv.entity.ModEntities;
 
 @Mod(MineCiv.MOD_ID)
 public class MineCiv {
@@ -36,6 +37,7 @@ public class MineCiv {
         MonumentMenu.register(modEventBus);
         ModVillagers.register(modEventBus);
         ModBlockEntities.register(modEventBus);
+        ModEntities.register(modEventBus);
 
         modEventBus.addListener(this::addCreative);
         context.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
@@ -45,6 +47,7 @@ public class MineCiv {
         if(event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(ModItems.ALEXANDRITE);
             event.accept(ModItems.RAW_ALEXANDRITE);
+            event.accept(ModItems.KNIGHT_SPAWN_EGG);
         }
 
         if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS) {

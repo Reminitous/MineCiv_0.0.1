@@ -1,6 +1,7 @@
 {
   "item.mineciv.alexandrite": "Alexandrite Gem",
   "item.mineciv.raw_alexandrite": "Raw Alexandrite",
+  "item.mineciv.knight_spawn_egg": "Knight Egg",
 
   "block.mineciv.alexandrite_block": "Block of Alexandrite",
   "block.mineciv.raw_alexandrite_block": "Block of Raw Alexandrite",
@@ -11,5 +12,7 @@
   "creativetab.mineciv.alexandrite_items": "Alexandrite Items",
   "creativetab.mineciv.alexandrite_blocks": "Alexandrite Blocks",
 
-  "entity.minecraft.villager.mineciv.cultivator": "Cultivator"
+  "entity.minecraft.villager.mineciv.cultivator": "Cultivator",
+  "entity.minecraft.villager.mineciv.knight": "Knight"
+
 }
