@@ -1,4 +1,4 @@
-package net.reminitous.mineciv.villager;
+package net.reminitous.mineciv.villager.goal;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.ItemHandlerHelper;
+import net.reminitous.mineciv.villager.ModVillagers;
 
 import javax.annotation.Nullable;
 import java.util.EnumSet;

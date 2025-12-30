@@ -5,8 +5,8 @@ import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.reminitous.mineciv.MineCiv;
-import net.reminitous.mineciv.villager.CultivatorWorkGoal;
-import net.reminitous.mineciv.villager.LumberjackWorkGoal;
+import net.reminitous.mineciv.villager.goal.CultivatorWorkGoal;
+import net.reminitous.mineciv.villager.goal.LumberjackWorkGoal;
 import net.reminitous.mineciv.villager.MonumentCivConversionGoal;
 
 @Mod.EventBusSubscriber(modid = MineCiv.MOD_ID)

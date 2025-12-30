@@ -4,6 +4,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.reminitous.mineciv.villager.goal.CultivatorWorkGoal;
 
 @Mod.EventBusSubscriber(modid = "mineciv")
 public class ModVillagerAI {
