@@ -27,6 +27,9 @@ import net.reminitous.mineciv.MineCiv;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 
+import net.minecraft.world.level.ChunkPos;
+import net.reminitous.mineciv.territory.TerritoryManager;
+
 import java.util.*;
 
 @Mod.EventBusSubscriber(modid = MineCiv.MOD_ID)
@@ -70,34 +73,36 @@ public final class CivNpcWorkEvents {
                 IItemHandler storage = findNearestStorage(level, villager.blockPosition(), SCAN_RADIUS);
 
                 if ("Farmer".equals(role) || "Shepherd".equals(role)) {
-                    doFarmerWork(level, villager, storage);
+                    doFarmerWork(level, civ, monument, villager, storage);
                 } else if ("Lumberjack".equals(role)) {
-                    doLumberWork(level, villager, storage);
+                    // allow small buffer outside territory for lumberjacks (tuning knob)
+                    doLumberWork(level, civ, monument, villager, storage, 32);
                 } else if ("Factory Worker".equals(role) || "Engineer".equals(role)) {
-                    doFactoryWork(level, villager, storage);
+                    doFactoryWork(level, civ, monument, villager, storage);
                 }
+
             }
         }
     }
 
     /* ---------------- Farmer: harvest mature crops + deposit ---------------- */
 
-    private static void doFarmerWork(ServerLevel level, Villager v, IItemHandler storage) {
+    private static void doFarmerWork(ServerLevel level, Civilization civ, BlockPos monument, Villager v, IItemHandler storage) {
         BlockPos origin = v.blockPosition();
 
-        BlockPos target = findNearestMatureCrop(level, origin, 6);
+        BlockPos target = findNearestMatureCrop(level, origin, 6, civ);
         if (target == null) return;
+
+        // Must be inside civ territory
+        if (!isInCivTerritory(level, civ, target)) return;
 
         BlockState state = level.getBlockState(target);
         if (!(state.getBlock() instanceof CropBlock crop)) return;
         if (!crop.isMaxAge(state)) return;
 
-        // Break crop (server-side) and capture drops
         List<ItemStack> drops = Block.getDrops(state, level, target, level.getBlockEntity(target), v, ItemStack.EMPTY);
         level.removeBlock(target, false);
 
-        // Replant if the crop block supports it: we just place the same crop at age 0 (simple)
-        // Works for most vanilla crops because the crop block itself is the plant.
         try {
             level.setBlock(target, crop.defaultBlockState(), 3);
         } catch (Exception ignored) {}
@@ -105,7 +110,7 @@ public final class CivNpcWorkEvents {
         depositOrDrop(level, target, storage, drops);
     }
 
-    private static BlockPos findNearestMatureCrop(ServerLevel level, BlockPos origin, int radius) {
+    private static BlockPos findNearestMatureCrop(ServerLevel level, BlockPos origin, int radius, Civilization civ) {
         BlockPos best = null;
         int bestDist = Integer.MAX_VALUE;
 
@@ -114,9 +119,12 @@ public final class CivNpcWorkEvents {
                 BlockPos p = origin.offset(dx, 0, dz);
                 if (!level.hasChunkAt(p)) continue;
 
-                // Check a small vertical window (crops are typically y..y+2)
                 for (int dy = -2; dy <= 2; dy++) {
                     BlockPos q = p.offset(0, dy, 0);
+
+                    // Only consider inside territory
+                    if (!isInCivTerritory(level, civ, q)) continue;
+
                     BlockState st = level.getBlockState(q);
                     if (st.getBlock() instanceof CropBlock crop && crop.isMaxAge(st)) {
                         int dist = dx * dx + dz * dz + dy * dy;
@@ -131,25 +139,28 @@ public final class CivNpcWorkEvents {
         return best;
     }
 
+
     /* ---------------- Lumberjack: break logs + deposit ---------------- */
 
-    private static void doLumberWork(ServerLevel level, Villager v, IItemHandler storage) {
+    private static void doLumberWork(ServerLevel level, Civilization civ, BlockPos monument, Villager v, IItemHandler storage, int bufferBlocks) {
         BlockPos origin = v.blockPosition();
 
-        BlockPos logPos = findNearestLog(level, origin, 7);
+        BlockPos logPos = findNearestLog(level, origin, 7, civ, monument, bufferBlocks);
         if (logPos == null) return;
 
-        BlockState state = level.getBlockState(logPos);
-        Block b = state.getBlock();
+        // Must be inside territory OR within buffer allowance
+        if (!isInCivOrBuffer(level, civ, monument, logPos, bufferBlocks)) return;
 
-        // Break one log and deposit
+        BlockState state = level.getBlockState(logPos);
+        if (!state.is(net.minecraft.tags.BlockTags.LOGS)) return;
+
         List<ItemStack> drops = Block.getDrops(state, level, logPos, level.getBlockEntity(logPos), v, ItemStack.EMPTY);
         level.removeBlock(logPos, false);
 
         depositOrDrop(level, logPos, storage, drops);
     }
 
-    private static BlockPos findNearestLog(ServerLevel level, BlockPos origin, int radius) {
+    private static BlockPos findNearestLog(ServerLevel level, BlockPos origin, int radius, Civilization civ, BlockPos monument, int bufferBlocks) {
         BlockPos best = null;
         int bestDist = Integer.MAX_VALUE;
 
@@ -160,6 +171,10 @@ public final class CivNpcWorkEvents {
 
                 for (int dy = -3; dy <= 6; dy++) {
                     BlockPos q = p.offset(0, dy, 0);
+
+                    // Only consider inside territory OR within buffer
+                    if (!isInCivOrBuffer(level, civ, monument, q, bufferBlocks)) continue;
+
                     BlockState st = level.getBlockState(q);
                     if (st.is(net.minecraft.tags.BlockTags.LOGS)) {
                         int dist = dx * dx + dz * dz + dy * dy;
@@ -174,27 +189,28 @@ public final class CivNpcWorkEvents {
         return best;
     }
 
+
     /* ---------------- Factory Worker: fuel furnaces + smelt + deposit ---------------- */
 
-    private static void doFactoryWork(ServerLevel level, Villager v, IItemHandler storage) {
+    private static void doFactoryWork(ServerLevel level, Civilization civ, BlockPos monument, Villager v, IItemHandler storage) {
         BlockPos origin = v.blockPosition();
 
-        AbstractFurnaceBlockEntity furnace = findNearestFurnace(level, origin, 8);
+        AbstractFurnaceBlockEntity furnace = findNearestFurnace(level, origin, 8, civ);
         if (furnace == null) return;
 
-        // Ensure fuel (unlimited coal behavior)
+        // Ensure fuel
         ensureFuel(furnace);
 
-        // Push output to storage first (keeps furnace clear)
+        // Push output to storage
         pushFurnaceOutputToStorage(furnace, storage);
 
-        // Pull a smeltable from storage into furnace input
+        // Feed smeltable from storage (only if storage is inside territory too)
         if (storage != null) {
             feedSmeltableFromStorage(level, furnace, storage);
         }
     }
 
-    private static AbstractFurnaceBlockEntity findNearestFurnace(ServerLevel level, BlockPos origin, int radius) {
+    private static AbstractFurnaceBlockEntity findNearestFurnace(ServerLevel level, BlockPos origin, int radius, Civilization civ) {
         AbstractFurnaceBlockEntity best = null;
         int bestDist = Integer.MAX_VALUE;
 
@@ -205,6 +221,10 @@ public final class CivNpcWorkEvents {
 
                 for (int dy = -2; dy <= 2; dy++) {
                     BlockPos q = p.offset(0, dy, 0);
+
+                    // Furnaces must be in civ territory
+                    if (!isInCivTerritory(level, civ, q)) continue;
+
                     BlockEntity be = level.getBlockEntity(q);
                     if (be instanceof AbstractFurnaceBlockEntity f) {
                         int dist = dx * dx + dz * dz + dy * dy;
@@ -339,4 +359,19 @@ public final class CivNpcWorkEvents {
             }
         }
     }
+
+    private static boolean isInCivTerritory(ServerLevel level, Civilization civ, BlockPos pos) {
+        ChunkPos cp = new ChunkPos(pos);
+        return civ.claimedChunks().contains(cp.toLong());
+    }
+
+    private static boolean isInCivOrBuffer(ServerLevel level, Civilization civ, BlockPos monument, BlockPos pos, int bufferBlocks) {
+        // If inside claimed chunks, always allowed
+        if (isInCivTerritory(level, civ, pos)) return true;
+
+        // Otherwise allow a simple radial buffer around the monument position (for lumberjacks v0)
+        if (monument == null) return false;
+        return monument.distManhattan(pos) <= bufferBlocks;
+    }
+
 }
