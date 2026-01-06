@@ -254,6 +254,7 @@ public final class Civilization {
         civ.civLevel = Math.max(1, tag.getInt("CivLevel"));
         civ.claimCredits = tag.getInt("ClaimCredits");
         civ.lastCreditsGrantedLevel = tag.getInt("LastCreditsGrantedLevel");
+        civ.grantCreditsUpToCurrentLevel();
 
         ListTag alliesList = tag.getList("Allies", 10);
         for (int i = 0; i < alliesList.size(); i++) {

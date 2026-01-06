@@ -168,4 +168,7 @@ public final class CivSavedData extends SavedData {
 
         return root;
     }
+
+    public Map<UUID, UUID> pendingInvites() { return pendingInvites; }
+
 }

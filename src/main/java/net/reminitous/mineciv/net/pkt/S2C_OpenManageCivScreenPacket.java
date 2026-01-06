@@ -23,6 +23,13 @@ public final class S2C_OpenManageCivScreenPacket {
     public final int memberCount;
     public final boolean isLeader;
     public final List<UUID> members;
+    public final List<UUID> pendingInvites;
+
+    public final int claimCredits;
+
+    // NEW: territory size info
+    public final int claimedChunks;
+    public final int maxChunks;
 
     public S2C_OpenManageCivScreenPacket(BlockPos monumentPos,
                                          UUID civId,
@@ -32,7 +39,11 @@ public final class S2C_OpenManageCivScreenPacket {
                                          long civXp,
                                          int memberCount,
                                          boolean isLeader,
-                                         List<UUID> members) {
+                                         List<UUID> members,
+                                         List<UUID> pendingInvites,
+                                         int claimCredits,
+                                         int claimedChunks,
+                                         int maxChunks) {
         this.monumentPos = monumentPos;
         this.civId = civId;
         this.civName = civName;
@@ -42,13 +53,18 @@ public final class S2C_OpenManageCivScreenPacket {
         this.memberCount = memberCount;
         this.isLeader = isLeader;
         this.members = members;
+        this.pendingInvites = pendingInvites;
+        this.claimCredits = claimCredits;
+        this.claimedChunks = claimedChunks;
+        this.maxChunks = maxChunks;
     }
 
     public static void encode(S2C_OpenManageCivScreenPacket msg, FriendlyByteBuf buf) {
         buf.writeBlockPos(msg.monumentPos);
         buf.writeUUID(msg.civId);
-        buf.writeUtf(msg.civName, 32);
-        buf.writeEnum(msg.classType);
+        buf.writeUtf(msg.civName == null ? "" : msg.civName, 32);
+        buf.writeEnum(msg.classType == null ? CivClassType.AGRICULTURAL : msg.classType);
+
         buf.writeVarInt(msg.civLevel);
         buf.writeVarLong(msg.civXp);
         buf.writeVarInt(msg.memberCount);
@@ -56,6 +72,15 @@ public final class S2C_OpenManageCivScreenPacket {
 
         buf.writeVarInt(msg.members.size());
         for (UUID u : msg.members) buf.writeUUID(u);
+
+        buf.writeVarInt(msg.pendingInvites.size());
+        for (UUID u : msg.pendingInvites) buf.writeUUID(u);
+
+        buf.writeVarInt(msg.claimCredits);
+
+        // NEW
+        buf.writeVarInt(msg.claimedChunks);
+        buf.writeVarInt(msg.maxChunks);
     }
 
     public static S2C_OpenManageCivScreenPacket decode(FriendlyByteBuf buf) {
@@ -63,16 +88,41 @@ public final class S2C_OpenManageCivScreenPacket {
         UUID civId = buf.readUUID();
         String name = buf.readUtf(32);
         CivClassType type = buf.readEnum(CivClassType.class);
+
         int lvl = buf.readVarInt();
         long xp = buf.readVarLong();
-        int membersCount = buf.readVarInt();
+        int memberCount = buf.readVarInt();
         boolean isLeader = buf.readBoolean();
 
         int n = buf.readVarInt();
         List<UUID> members = new ArrayList<>(Math.max(0, n));
         for (int i = 0; i < n; i++) members.add(buf.readUUID());
 
-        return new S2C_OpenManageCivScreenPacket(pos, civId, name, type, lvl, xp, membersCount, isLeader, members);
+        int p = buf.readVarInt();
+        List<UUID> pending = new ArrayList<>(Math.max(0, p));
+        for (int i = 0; i < p; i++) pending.add(buf.readUUID());
+
+        int credits = buf.readVarInt();
+
+        // NEW
+        int claimedChunks = buf.readVarInt();
+        int maxChunks = buf.readVarInt();
+
+        return new S2C_OpenManageCivScreenPacket(
+                pos,
+                civId,
+                name,
+                type,
+                lvl,
+                xp,
+                memberCount,
+                isLeader,
+                members,
+                pending,
+                credits,
+                claimedChunks,
+                maxChunks
+        );
     }
 
     public static void handle(S2C_OpenManageCivScreenPacket msg, CustomPayloadEvent.Context ctx) {

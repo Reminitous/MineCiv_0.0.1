@@ -70,5 +70,41 @@ public final class Network {
                 .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_RespondInvitePacket::handle)
                 .add();
 
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_RequestManageCivDataPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_RequestManageCivDataPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_RequestManageCivDataPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_RequestManageCivDataPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_CancelInvitePacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_CancelInvitePacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_CancelInvitePacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_CancelInvitePacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_LeaveCivPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_LeaveCivPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_LeaveCivPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_LeaveCivPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_DisbandCivPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_DisbandCivPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_DisbandCivPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_DisbandCivPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_ClaimCurrentChunkPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_ClaimCurrentChunkPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_ClaimCurrentChunkPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_ClaimCurrentChunkPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_ClaimAdjacentToMonumentPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_ClaimAdjacentToMonumentPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_ClaimAdjacentToMonumentPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_ClaimAdjacentToMonumentPacket::handle)
+                .add();
+
     }
 }

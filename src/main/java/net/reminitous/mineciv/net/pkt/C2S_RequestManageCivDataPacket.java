@@ -1,0 +1,95 @@
+package net.reminitous.mineciv.net.pkt;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.event.network.CustomPayloadEvent;
+import net.minecraftforge.network.PacketDistributor;
+
+import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivSavedData;
+import net.reminitous.mineciv.civ.Civilization;
+import net.reminitous.mineciv.net.Network;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+public final class C2S_RequestManageCivDataPacket {
+
+    private final BlockPos monumentPos;
+    private final UUID civId;
+
+    public C2S_RequestManageCivDataPacket(BlockPos monumentPos, UUID civId) {
+        this.monumentPos = monumentPos;
+        this.civId = civId;
+    }
+
+    public static void encode(C2S_RequestManageCivDataPacket msg, FriendlyByteBuf buf) {
+        buf.writeBlockPos(msg.monumentPos);
+        buf.writeUUID(msg.civId);
+    }
+
+    public static C2S_RequestManageCivDataPacket decode(FriendlyByteBuf buf) {
+        BlockPos pos = buf.readBlockPos();
+        UUID civId = buf.readUUID();
+        return new C2S_RequestManageCivDataPacket(pos, civId);
+    }
+
+    public static void handle(C2S_RequestManageCivDataPacket msg, CustomPayloadEvent.Context ctx) {
+        var sender = ctx.getSender();
+        if (!(sender instanceof ServerPlayer player)) {
+            ctx.setPacketHandled(true);
+            return;
+        }
+
+        ctx.enqueueWork(() -> {
+            if (!(player.level() instanceof ServerLevel level)) return;
+
+            if (!level.hasChunkAt(msg.monumentPos)) return;
+
+            var be = level.getBlockEntity(msg.monumentPos);
+            if (!(be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity monumentBE)) return;
+
+            if (!monumentBE.isBound()) return;
+            if (monumentBE.getCivId() == null) return;
+
+            UUID bound = monumentBE.getCivId();
+            if (!bound.equals(msg.civId)) return;
+
+            CivSavedData data = CivSavedData.get(level.getServer());
+            Civilization civ = data.getCiv(bound);
+            if (civ == null) return;
+
+            boolean isLeader = civ.leader() != null && civ.leader().equals(player.getUUID());
+
+            List<UUID> members = new ArrayList<>(civ.members());
+
+            List<UUID> pending = new ArrayList<>();
+            for (Map.Entry<UUID, UUID> e : data.pendingInvites().entrySet()) {
+                if (bound.equals(e.getValue())) pending.add(e.getKey());
+            }
+
+            Network.CH.send(
+                    new S2C_OpenManageCivScreenPacket(
+                            msg.monumentPos,
+                            civ.id(),
+                            civ.name() == null ? "" : civ.name(),
+                            civ.classType() == null ? CivClassType.AGRICULTURAL : civ.classType(),
+                            civ.civLevel(),
+                            civ.civXp(),
+                            civ.members().size(),
+                            isLeader,
+                            members,
+                            pending,
+                            civ.claimCredits() // NEW
+                    ),
+                    PacketDistributor.PLAYER.with(player)
+            );
+        });
+
+        ctx.setPacketHandled(true);
+    }
+}
