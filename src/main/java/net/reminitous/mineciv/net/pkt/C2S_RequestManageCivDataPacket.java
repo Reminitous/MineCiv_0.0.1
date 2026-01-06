@@ -11,6 +11,7 @@ import net.reminitous.mineciv.civ.CivClassType;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.net.Network;
+import net.reminitous.mineciv.territory.TerritoryManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +73,9 @@ public final class C2S_RequestManageCivDataPacket {
                 if (bound.equals(e.getValue())) pending.add(e.getKey());
             }
 
+            int claimedChunks = civ.claimedChunks().size();
+            int maxChunks = TerritoryManager.MAX_CHUNKS;
+
             Network.CH.send(
                     new S2C_OpenManageCivScreenPacket(
                             msg.monumentPos,
@@ -84,10 +88,13 @@ public final class C2S_RequestManageCivDataPacket {
                             isLeader,
                             members,
                             pending,
-                            civ.claimCredits() // NEW
+                            civ.claimCredits(),
+                            claimedChunks,
+                            maxChunks
                     ),
                     PacketDistributor.PLAYER.with(player)
             );
+
         });
 
         ctx.setPacketHandled(true);
