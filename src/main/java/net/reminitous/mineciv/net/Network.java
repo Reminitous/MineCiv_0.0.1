@@ -33,5 +33,42 @@ public final class Network {
                 .decoder(C2S_CreateCivPacket::decode)
                 .consumerMainThread(C2S_CreateCivPacket::handle)
                 .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_OpenManageCivScreenPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_OpenManageCivScreenPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_OpenManageCivScreenPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_OpenManageCivScreenPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_RenameCivPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_RenameCivPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_RenameCivPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_RenameCivPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_KickMemberPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_KickMemberPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_KickMemberPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_KickMemberPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_OpenInvitePopupPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_OpenInvitePopupPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_OpenInvitePopupPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_OpenInvitePopupPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_InvitePlayerPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_InvitePlayerPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_InvitePlayerPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_InvitePlayerPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_RespondInvitePacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_RespondInvitePacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_RespondInvitePacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_RespondInvitePacket::handle)
+                .add();
+
     }
 }

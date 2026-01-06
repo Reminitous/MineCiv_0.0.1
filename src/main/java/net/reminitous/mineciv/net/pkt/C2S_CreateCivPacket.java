@@ -3,7 +3,6 @@ package net.reminitous.mineciv.net.pkt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 
 import net.minecraftforge.event.network.CustomPayloadEvent;
@@ -36,7 +35,7 @@ public final class C2S_CreateCivPacket {
         return new C2S_CreateCivPacket(name, type, pos);
     }
 
-    public static void handle(C2S_CreateCivPacket msg, net.minecraftforge.event.network.CustomPayloadEvent.Context ctx) {
+    public static void handle(C2S_CreateCivPacket msg, CustomPayloadEvent.Context ctx) {
         var sender = ctx.getSender();
         if (!(sender instanceof net.minecraft.server.level.ServerPlayer player)) {
             ctx.setPacketHandled(true);
@@ -65,7 +64,7 @@ public final class C2S_CreateCivPacket {
             ChunkPos chunk = new ChunkPos(msg.monumentPos);
             if (!CivilizationManager.canCreateCiv(level, player.getUUID(), chunk)) return;
 
-// ---- CREATE CIV ----
+            // ---- CREATE CIV ----
             var civ = CivilizationManager.createCiv(
                     level,
                     player.getUUID(),
@@ -74,15 +73,8 @@ public final class C2S_CreateCivPacket {
                     msg.monumentPos
             );
 
-// DEBUG mapping
-            var data = net.reminitous.mineciv.civ.CivSavedData.get(level.getServer());
-            var mapped = data.getPlayersCiv(player.getUUID());
-            net.reminitous.mineciv.MineCiv.LOGGER.info("MineCiv DEBUG: after createCiv, player {} mapped to {}", player.getUUID(), mapped);
-            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("DEBUG: mapping after create = " + mapped));
-
-// ---- BIND MONUMENT ----
+            // ---- BIND MONUMENT ----
             monumentBE.setCivId(civ.id());
-
         });
 
         ctx.setPacketHandled(true);

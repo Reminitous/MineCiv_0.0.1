@@ -3,12 +3,12 @@ package net.reminitous.mineciv.civ;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.server.MinecraftServer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -18,22 +18,13 @@ public final class CivSavedData extends SavedData {
 
     public static final String NAME = "mineciv";
 
-    /* ---------------- DATA ---------------- */
-
     private final Map<UUID, Civilization> civs = new HashMap<>();
     private final Map<Long, UUID> chunkOwner = new HashMap<>();
     private final Map<UUID, UUID> playerToCiv = new HashMap<>();
 
-    /* ---------------- ACCESS ---------------- */
+    // NEW: invited player -> civId
+    private final Map<UUID, UUID> pendingInvites = new HashMap<>();
 
-    /** Dimension-safe access (use this everywhere) */
-    public static CivSavedData get(MinecraftServer server) {
-        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
-        if (overworld == null) throw new IllegalStateException("Overworld is null");
-        return get(overworld);
-    }
-
-    /** Internal level access */
     public static CivSavedData get(ServerLevel level) {
         DimensionDataStorage storage = level.getDataStorage();
         return storage.computeIfAbsent(
@@ -46,25 +37,16 @@ public final class CivSavedData extends SavedData {
         );
     }
 
-    /* ---------------- LOOKUPS ---------------- */
-
-    public Civilization getCiv(UUID civId) {
-        return civs.get(civId);
+    public static CivSavedData get(MinecraftServer server) {
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        if (overworld == null) throw new IllegalStateException("Overworld is null");
+        return get(overworld);
     }
 
-    public Map<UUID, Civilization> civs() {
-        return civs;
-    }
+    public Map<UUID, Civilization> civs() { return civs; }
+    public Map<Long, UUID> chunkOwner() { return chunkOwner; }
 
-    public UUID getChunkOwner(long chunkLong) {
-        return chunkOwner.get(chunkLong);
-    }
-
-    public UUID getPlayersCiv(UUID playerId) {
-        return playerToCiv.get(playerId);
-    }
-
-    /* ---------------- MUTATION ---------------- */
+    public Civilization getCiv(UUID civId) { return civs.get(civId); }
 
     public void putCiv(Civilization civ) {
         civs.put(civ.id(), civ);
@@ -74,9 +56,11 @@ public final class CivSavedData extends SavedData {
     public void removeCiv(UUID civId) {
         civs.remove(civId);
         chunkOwner.entrySet().removeIf(e -> e.getValue().equals(civId));
-        playerToCiv.entrySet().removeIf(e -> e.getValue().equals(civId));
+        pendingInvites.entrySet().removeIf(e -> e.getValue().equals(civId));
         setDirty();
     }
+
+    public UUID getChunkOwner(long chunkLong) { return chunkOwner.get(chunkLong); }
 
     public void setChunkOwner(long chunkLong, UUID civId) {
         if (civId == null) chunkOwner.remove(chunkLong);
@@ -84,13 +68,22 @@ public final class CivSavedData extends SavedData {
         setDirty();
     }
 
+    public UUID getPlayersCiv(UUID playerId) { return playerToCiv.get(playerId); }
+
     public void setPlayersCiv(UUID playerId, UUID civId) {
         if (civId == null) playerToCiv.remove(playerId);
         else playerToCiv.put(playerId, civId);
         setDirty();
     }
 
-    /* ---------------- LOAD ---------------- */
+    // ---- Invites ----
+    public UUID getPendingInvite(UUID playerId) { return pendingInvites.get(playerId); }
+
+    public void setPendingInvite(UUID playerId, UUID civId) {
+        if (civId == null) pendingInvites.remove(playerId);
+        else pendingInvites.put(playerId, civId);
+        setDirty();
+    }
 
     public static CivSavedData load(CompoundTag root, HolderLookup.Provider provider) {
         CivSavedData data = new CivSavedData();
@@ -98,35 +91,40 @@ public final class CivSavedData extends SavedData {
         // Civs
         ListTag civList = root.getList("Civs", 10);
         for (int i = 0; i < civList.size(); i++) {
-            Civilization civ = Civilization.fromNbt(civList.getCompound(i));
+            CompoundTag civTag = civList.getCompound(i);
+            Civilization civ = Civilization.fromNbt(civTag);
             data.civs.put(civ.id(), civ);
         }
 
-        // Chunk ownership
+        // Chunk owners
         ListTag ownerList = root.getList("ChunkOwner", 10);
         for (int i = 0; i < ownerList.size(); i++) {
             CompoundTag t = ownerList.getCompound(i);
-            data.chunkOwner.put(t.getLong("Chunk"), t.getUUID("CivId"));
+            long chunkLong = t.getLong("Chunk");
+            UUID civId = t.getUUID("CivId");
+            data.chunkOwner.put(chunkLong, civId);
         }
 
-        // Player → Civ mapping
-        ListTag playerList = root.getList("PlayerToCiv", 10);
-        for (int i = 0; i < playerList.size(); i++) {
-            CompoundTag t = playerList.getCompound(i);
-            data.playerToCiv.put(t.getUUID("Player"), t.getUUID("CivId"));
+        // Player -> civ mapping
+        ListTag mapList = root.getList("PlayerToCiv", 10);
+        for (int i = 0; i < mapList.size(); i++) {
+            CompoundTag t = mapList.getCompound(i);
+            UUID playerId = t.getUUID("Player");
+            UUID civId = t.getUUID("CivId");
+            data.playerToCiv.put(playerId, civId);
         }
 
-        ListTag warList = root.getList("Wars", 10);
-        for (int i = 0; i < warList.size(); i++) {
-            CompoundTag t = warList.getCompound(i);
-            var wr = net.reminitous.mineciv.war.WarRecord.fromNbt(t);
-            data.wars.put(wr.warId, wr);
+        // Pending invites
+        ListTag invList = root.getList("PendingInvites", 10);
+        for (int i = 0; i < invList.size(); i++) {
+            CompoundTag t = invList.getCompound(i);
+            UUID playerId = t.getUUID("Player");
+            UUID civId = t.getUUID("CivId");
+            data.pendingInvites.put(playerId, civId);
         }
 
         return data;
     }
-
-    /* ---------------- SAVE ---------------- */
 
     @Override
     public CompoundTag save(CompoundTag root, HolderLookup.Provider provider) {
@@ -138,7 +136,7 @@ public final class CivSavedData extends SavedData {
         }
         root.put("Civs", civList);
 
-        // Chunk ownership
+        // Chunk owners
         ListTag ownerList = new ListTag();
         for (Map.Entry<Long, UUID> e : chunkOwner.entrySet()) {
             CompoundTag t = new CompoundTag();
@@ -148,26 +146,26 @@ public final class CivSavedData extends SavedData {
         }
         root.put("ChunkOwner", ownerList);
 
-        // Player → Civ mapping
-        ListTag playerList = new ListTag();
+        // Player -> civ mapping
+        ListTag mapList = new ListTag();
         for (Map.Entry<UUID, UUID> e : playerToCiv.entrySet()) {
             CompoundTag t = new CompoundTag();
             t.putUUID("Player", e.getKey());
             t.putUUID("CivId", e.getValue());
-            playerList.add(t);
+            mapList.add(t);
         }
-        root.put("PlayerToCiv", playerList);
+        root.put("PlayerToCiv", mapList);
 
-        ListTag warList = new ListTag();
-        for (var wr : wars.values()) {
-            warList.add(wr.toNbt());
+        // Pending invites
+        ListTag invList = new ListTag();
+        for (Map.Entry<UUID, UUID> e : pendingInvites.entrySet()) {
+            CompoundTag t = new CompoundTag();
+            t.putUUID("Player", e.getKey());
+            t.putUUID("CivId", e.getValue());
+            invList.add(t);
         }
-        root.put("Wars", warList);
+        root.put("PendingInvites", invList);
 
         return root;
     }
-
-    private final Map<UUID, net.reminitous.mineciv.war.WarRecord> wars = new HashMap<>();
-    public Map<UUID, net.reminitous.mineciv.war.WarRecord> wars() { return wars; }
-
 }

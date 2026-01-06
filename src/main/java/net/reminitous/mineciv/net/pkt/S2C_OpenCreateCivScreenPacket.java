@@ -1,11 +1,11 @@
 package net.reminitous.mineciv.net.pkt;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
-
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.network.CustomPayloadEvent;
-import net.minecraftforge.fml.DistExecutor;
+
+import net.reminitous.mineciv.client.screen.CreateCivScreen;
 
 public final class S2C_OpenCreateCivScreenPacket {
 
@@ -24,11 +24,11 @@ public final class S2C_OpenCreateCivScreenPacket {
     }
 
     public static void handle(S2C_OpenCreateCivScreenPacket msg, CustomPayloadEvent.Context ctx) {
-        ctx.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-            // TODO: replace with your actual screen class
-            // net.minecraft.client.Minecraft.getInstance().setScreen(new CreateCivScreen(msg.monumentPos));
-        }));
-
+        ctx.enqueueWork(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null) return;
+            mc.setScreen(new CreateCivScreen(msg.monumentPos));
+        });
         ctx.setPacketHandled(true);
     }
 }
