@@ -1,21 +1,23 @@
 package net.reminitous.mineciv.events;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.Projectile;
 
-import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import net.reminitous.mineciv.MineCiv;
-import net.reminitous.mineciv.civ.Civilization;
+import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.CivilizationManager;
 import net.reminitous.mineciv.territory.TerritoryManager;
+import net.reminitous.mineciv.war.WarSavedData;
+import net.reminitous.mineciv.war.WarState;
 
-import java.util.Optional;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = MineCiv.MOD_ID)
@@ -23,81 +25,138 @@ public final class TerritoryCombatEvents {
 
     private TerritoryCombatEvents() {}
 
-    private static final String NBT_LAST_PVP_DENY_TICK = "MineCiv_LastPvpDenyTick";
+    private static final String NBT_LAST_PVP_DENY_TICK = "MineCiv_LastPvPDenyTick";
 
     @SubscribeEvent
-    public static void onLivingHurt(LivingHurtEvent e) {
-        LivingEntity victim = e.getEntity();
-        if (!(victim.level() instanceof ServerLevel level)) return;
+    public static void onLivingAttack(LivingAttackEvent e) {
+        if (!(e.getEntity().level() instanceof ServerLevel level)) return;
 
-        // Only care about player vs player
-        if (!(victim instanceof ServerPlayer victimPlayer)) return;
+        // Only enforce PvP
+        if (!(e.getEntity() instanceof ServerPlayer victim)) return;
 
-        Entity src = e.getSource().getEntity(); // attacker entity, may be null
-        if (!(src instanceof ServerPlayer attackerPlayer)) return;
+        ServerPlayer attacker = resolveAttackingPlayer(e.getSource().getEntity(), e.getSource().getDirectEntity());
+        if (attacker == null) return;
 
-        // Prevent self damage
-        if (attackerPlayer.getUUID().equals(victimPlayer.getUUID())) return;
+        // Same player edge case
+        if (attacker.getUUID().equals(victim.getUUID())) return;
 
-        UUID attackerCiv = getPlayerCivId(level, attackerPlayer);
-        UUID victimCiv = getPlayerCivId(level, victimPlayer);
+        UUID attackerCiv = CivSavedData.get(level.getServer()).getPlayersCiv(attacker.getUUID());
+        UUID victimCiv = CivSavedData.get(level.getServer()).getPlayersCiv(victim.getUUID());
 
-        // --- Rule 0: Same civ never damages (anywhere) ---
-        if (attackerCiv != null && attackerCiv.equals(victimCiv)) {
+        // 1) Friendly fire OFF everywhere: same civ + allies cannot hurt each other anywhere
+        if (attackerCiv != null && victimCiv != null) {
+            if (attackerCiv.equals(victimCiv)) {
+                e.setCanceled(true);
+                return;
+            }
+            if (CivilizationManager.areAllies(level, attackerCiv, victimCiv)) {
+                e.setCanceled(true);
+                return;
+            }
+        }
+
+        // 2) ACTIVE war exception: during ACTIVE war, attacker <-> victim can fight (anywhere)
+        if (attackerCiv != null && victimCiv != null && isActiveWarBetween(level, attackerCiv, victimCiv)) {
+            return; // allow
+        }
+
+        // 3) Territory ownership based on BOTH positions
+        BlockPos aPos = attacker.blockPosition();
+        BlockPos vPos = victim.blockPosition();
+
+        UUID ownerAtAttacker = TerritoryManager.getOwnerCivId(level, aPos);
+        UUID ownerAtVictim = TerritoryManager.getOwnerCivId(level, vPos);
+
+        boolean attackerInWilderness = ownerAtAttacker == null;
+        boolean victimInWilderness = ownerAtVictim == null;
+
+        // Wilderness should always allow combat
+        if (attackerInWilderness && victimInWilderness) {
+            return;
+        }
+
+        // If victim is inside claimed territory (defender land), protect defenders:
+        if (ownerAtVictim != null) {
+            // If victim is a member of the owning civ, outsiders cannot damage them (unless war handled above)
+            if (victimCiv != null && victimCiv.equals(ownerAtVictim)) {
+                // Only the territory owner can damage defenders inside their own land
+                if (attackerCiv != null && attackerCiv.equals(ownerAtVictim)) {
+                    return; // defender attacking inside their land (could be civil war case already blocked above)
+                }
+
+                e.setCanceled(true);
+                deny(attacker, "You cannot attack defenders in their territory.");
+                return;
+            }
+
+            // Outsiders fighting outsiders inside someone else's land is blocked
+            if (attackerCiv == null || !attackerCiv.equals(ownerAtVictim)) {
+                e.setCanceled(true);
+                deny(attacker, "You cannot fight inside another civilization's territory.");
+                return;
+            }
+
+            // Attacker is the territory owner civ and victim is outsider -> allowed
+            return;
+        }
+
+        // At this point: victim is in wilderness, attacker might be in claimed land or wilderness.
+        // Wilderness allows combat, BUT we still prevent outsiders fighting inside a claimed land when the attacker is inside it?
+        // Your “defenders can fight outsiders” implies: if attacker is inside their own land, they can attack out.
+        if (ownerAtAttacker != null) {
+            // If attacker is inside SOMEONE'S territory:
+            // Only allow if attacker is the owner of that territory (defender shooting out).
+            if (attackerCiv != null && attackerCiv.equals(ownerAtAttacker)) {
+                return; // defender attacking outward into wilderness
+            }
+
+            // Otherwise attacker is an outsider standing inside someone else's claimed land trying to fight into wilderness
             e.setCanceled(true);
-            denyMessage(attackerPlayer, "You cannot hurt members of your civilization.");
+            deny(attacker, "You cannot initiate combat from within another civilization's territory.");
             return;
         }
 
-        // --- Rule 1: Allies never damage (anywhere) ---
-        if (attackerCiv != null && victimCiv != null && CivilizationManager.areAllies(level, attackerCiv, victimCiv)) {
-            e.setCanceled(true);
-            denyMessage(attackerPlayer, "You cannot hurt allies.");
-            return;
-        }
-
-        // Territory based on where the victim is standing
-        UUID ownerCiv = TerritoryManager.getOwnerCivId(level, victimPlayer.blockPosition());
-
-        // --- Rule 2: Wilderness: allow PvP (except above rules) ---
-        if (ownerCiv == null) {
-            return;
-        }
-
-        // --- Rule 3: Claimed land rules ---
-        boolean attackerIsDefender = attackerCiv != null && attackerCiv.equals(ownerCiv);
-        boolean victimIsDefender = victimCiv != null && victimCiv.equals(ownerCiv);
-
-        // Outsider -> Defender (blocked)
-        if (!attackerIsDefender && victimIsDefender) {
-            e.setCanceled(true);
-            denyMessage(attackerPlayer, "You cannot attack defenders inside their territory.");
-            return;
-        }
-
-        // Outsider -> Outsider (blocked) inside someone else's territory
-        if (!attackerIsDefender && !victimIsDefender) {
-            e.setCanceled(true);
-            denyMessage(attackerPlayer, "You cannot fight inside another civilization's territory.");
-            return;
-        }
-
-        // Defender -> Outsider (allowed)
-        // Defender -> Defender won't happen because same-civ damage already blocked above.
+        // victim wilderness, attacker wilderness handled earlier, so remaining case is victim wilderness & attacker wilderness already returned.
+        // Default allow.
     }
 
     /* ---------------- Helpers ---------------- */
 
-    private static UUID getPlayerCivId(ServerLevel level, ServerPlayer player) {
-        Optional<Civilization> civOpt = CivilizationManager.findPlayerCiv(level, player.getUUID());
-        return civOpt.map(Civilization::id).orElse(null);
+    private static ServerPlayer resolveAttackingPlayer(Entity sourceEntity, Entity directEntity) {
+        if (sourceEntity instanceof ServerPlayer sp) return sp;
+
+        if (directEntity instanceof Projectile proj) {
+            Entity owner = proj.getOwner();
+            if (owner instanceof ServerPlayer sp) return sp;
+        }
+
+        if (directEntity instanceof ServerPlayer sp) return sp;
+
+        return null;
     }
 
-    private static void denyMessage(ServerPlayer player, String msg) {
+    private static boolean isActiveWarBetween(ServerLevel level, UUID civA, UUID civB) {
+        if (civA == null || civB == null) return false;
+
+        WarSavedData warData = WarSavedData.get(level.getServer());
+        UUID warIdA = warData.getActiveWarId(civA);
+        if (warIdA == null) return false;
+
+        WarState w = warData.getWar(warIdA);
+        if (w == null) return false;
+
+        if (w.phase() != WarState.Phase.ACTIVE) return false;
+
+        boolean match1 = civA.equals(w.attackerCivId()) && civB.equals(w.defenderCivId());
+        boolean match2 = civA.equals(w.defenderCivId()) && civB.equals(w.attackerCivId());
+        return match1 || match2;
+    }
+
+    private static void deny(ServerPlayer player, String msg) {
         long nowTick = player.server.getTickCount();
         long last = player.getPersistentData().getLong(NBT_LAST_PVP_DENY_TICK);
 
-        // prevent spam: at most once per second
+        // Spam guard: at most once per second
         if (nowTick - last < 20) return;
 
         player.getPersistentData().putLong(NBT_LAST_PVP_DENY_TICK, nowTick);
