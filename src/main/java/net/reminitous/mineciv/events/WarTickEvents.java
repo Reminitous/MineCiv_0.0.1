@@ -21,6 +21,5 @@ public final class WarTickEvents {
         // Tick once per second
         if ((level.getServer().getTickCount() % 20) != 0) return;
 
-        WarManager.tick(level);
     }
 }

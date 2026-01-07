@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
+import net.reminitous.mineciv.civ.CivilizationManager;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -13,100 +14,113 @@ public final class WarManager {
 
     private WarManager() {}
 
-    public static Optional<WarRecord> activeWarBetween(CivSavedData data, UUID a, UUID b) {
-        for (WarRecord wr : data.wars().values()) {
-            if (wr.state != WarState.ACTIVE) continue;
-            boolean match = (wr.attackerCiv.equals(a) && wr.defenderCiv.equals(b))
-                    || (wr.attackerCiv.equals(b) && wr.defenderCiv.equals(a));
-            if (match) return Optional.of(wr);
+    public static Optional<WarState> activeWarBetween(ServerLevel level, UUID a, UUID b) {
+        WarSavedData warData = WarSavedData.get(level.getServer());
+
+        for (WarState w : warData.wars().values()) {
+            if (w.phase() != WarState.Phase.ACTIVE) continue;
+
+            boolean match = (equals(w.attackerCivId(), a) && equals(w.defenderCivId(), b))
+                    || (equals(w.attackerCivId(), b) && equals(w.defenderCivId(), a));
+
+            if (match) return Optional.of(w);
         }
         return Optional.empty();
     }
 
-    public static boolean proposeWar(ServerLevel level, UUID attackerCiv, UUID defenderCiv, int prepMinutes) {
-        if (attackerCiv == null || defenderCiv == null) return false;
-        if (attackerCiv.equals(defenderCiv)) return false;
+    public static boolean proposeWar(ServerLevel level, UUID attackerCivId, UUID defenderCivId, int prepMinutes) {
+        if (attackerCivId == null || defenderCivId == null) return false;
+        if (attackerCivId.equals(defenderCivId)) return false;
         if (!(prepMinutes == 15 || prepMinutes == 30 || prepMinutes == 45 || prepMinutes == 60)) return false;
 
-        CivSavedData data = CivSavedData.get(level.getServer());
+        CivSavedData civData = CivSavedData.get(level.getServer());
+        Civilization attacker = civData.getCiv(attackerCivId);
+        Civilization defender = civData.getCiv(defenderCivId);
+        if (attacker == null || defender == null) return false;
 
-        if (activeWarBetween(data, attackerCiv, defenderCiv).isPresent()) return false;
+        // cannot war allies
+        if (CivilizationManager.areAllies(level, attackerCivId, defenderCivId)) return false;
 
-        // create war record
-        UUID warId = UUID.randomUUID();
-        WarRecord wr = new WarRecord(warId, attackerCiv, defenderCiv);
-        wr.proposedAtMs = System.currentTimeMillis();
-        wr.prepMinutes = prepMinutes;
+        WarSavedData warData = WarSavedData.get(level.getServer());
 
-        // force start policy scaffolding:
-        // - if declined: 24h after proposal
-        // - if no response: if leader online, 1h; else when leader comes online; hard cap 72h
-        // We'll compute "forceStartAtMs" as the 72h cap initially; updated later on tick.
-        wr.forceStartAtMs = wr.proposedAtMs + 72L * 60L * 60L * 1000L;
+        // either civ already in a war
+        if (warData.getActiveWarId(attackerCivId) != null) return false;
+        if (warData.getActiveWarId(defenderCivId) != null) return false;
 
-        data.wars().put(wr.warId, wr);
-        data.setDirty();
-        return true;
-    }
-
-    public static boolean acceptWar(ServerLevel level, UUID defenderCiv, UUID warId) {
-        CivSavedData data = CivSavedData.get(level.getServer());
-        WarRecord wr = data.wars().get(warId);
-        if (wr == null) return false;
-        if (!wr.defenderCiv.equals(defenderCiv)) return false;
-        if (wr.state != WarState.PROPOSED) return false;
-
-        long now = System.currentTimeMillis();
-        wr.state = WarState.SCHEDULED;
-        wr.scheduledStartAtMs = now + wr.prepMinutes * 60L * 1000L;
-
-        data.setDirty();
-        return true;
-    }
-
-    public static boolean declineWar(ServerLevel level, UUID defenderCiv, UUID warId) {
-        CivSavedData data = CivSavedData.get(level.getServer());
-        WarRecord wr = data.wars().get(warId);
-        if (wr == null) return false;
-        if (!wr.defenderCiv.equals(defenderCiv)) return false;
-        if (wr.state != WarState.PROPOSED) return false;
-
-        wr.defenderDeclined = true;
-        // starts anyway 24h after decline/proposal (we’ll use proposal time for simplicity)
-        wr.forceStartAtMs = Math.min(wr.forceStartAtMs, wr.proposedAtMs + 24L * 60L * 60L * 1000L);
-
-        data.setDirty();
-        return true;
-    }
-
-    public static void tick(ServerLevel level) {
-        CivSavedData data = CivSavedData.get(level.getServer());
+        // create war
         long now = System.currentTimeMillis();
 
-        for (WarRecord wr : data.wars().values()) {
-            if (wr.state == WarState.ENDED) continue;
+        WarState w = new WarState(UUID.randomUUID());
+        w.setAttackerCivId(attackerCivId);
+        w.setDefenderCivId(defenderCivId);
+        w.setPhase(WarState.Phase.PROPOSED);
+        w.setProposedAtMs(now);
+        w.setPreparationMinutes(prepMinutes);
+        w.setDefenderAccepted(false);
 
-            // If scheduled and time reached -> ACTIVE
-            if (wr.state == WarState.SCHEDULED && now >= wr.scheduledStartAtMs) {
-                wr.state = WarState.ACTIVE;
-                data.setDirty();
-                continue;
-            }
+        warData.putWar(w);
+        warData.setActiveWar(attackerCivId, w.warId());
+        warData.setActiveWar(defenderCivId, w.warId());
 
-            // If proposed and force time reached -> ACTIVE
-            if (wr.state == WarState.PROPOSED && now >= wr.forceStartAtMs) {
-                wr.state = WarState.ACTIVE;
-                data.setDirty();
-            }
-        }
+        return true;
+    }
+
+    public static boolean acceptWar(ServerLevel level, UUID defenderCivId, UUID warId) {
+        WarSavedData warData = WarSavedData.get(level.getServer());
+        WarState w = warData.getWar(warId);
+        if (w == null) return false;
+
+        if (!equals(w.defenderCivId(), defenderCivId)) return false;
+        if (w.phase() != WarState.Phase.PROPOSED) return false;
+
+        long now = System.currentTimeMillis();
+        long prepEnds = now + (long) w.preparationMinutes() * 60_000L;
+
+        w.setDefenderAccepted(true);
+        w.setPhase(WarState.Phase.PREPARING);
+        w.setPreparationEndsAtMs(prepEnds);
+
+        warData.putWar(w);
+        return true;
+    }
+
+    public static boolean declineWar(ServerLevel level, UUID defenderCivId, UUID warId) {
+        WarSavedData warData = WarSavedData.get(level.getServer());
+        WarState w = warData.getWar(warId);
+        if (w == null) return false;
+
+        if (!equals(w.defenderCivId(), defenderCivId)) return false;
+        if (w.phase() != WarState.Phase.PROPOSED) return false;
+
+        // Decline -> still starts in 24 hours
+        long now = System.currentTimeMillis();
+        long startsIn24h = now + 24L * 60L * 60L * 1000L;
+
+        w.setDefenderAccepted(false);
+        w.setPhase(WarState.Phase.PREPARING);
+        w.setPreparationEndsAtMs(startsIn24h);
+
+        warData.putWar(w);
+        return true;
     }
 
     public static Optional<Civilization> civOf(ServerLevel level, UUID playerId) {
-        return net.reminitous.mineciv.civ.CivilizationManager.findPlayerCiv(level, playerId);
+        return CivilizationManager.findPlayerCiv(level, playerId);
     }
 
     public static boolean isLeader(ServerLevel level, UUID playerId) {
         Optional<Civilization> civ = civOf(level, playerId);
         return civ.isPresent() && civ.get().leader() != null && civ.get().leader().equals(playerId);
+    }
+
+    public static void notifyCiv(ServerLevel level, Civilization civ, net.minecraft.network.chat.Component msg) {
+        for (UUID memberId : civ.members()) {
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(memberId);
+            if (p != null) p.sendSystemMessage(msg);
+        }
+    }
+
+    private static boolean equals(UUID a, UUID b) {
+        return a != null && a.equals(b);
     }
 }

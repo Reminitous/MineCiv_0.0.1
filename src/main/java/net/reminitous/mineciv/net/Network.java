@@ -106,5 +106,29 @@ public final class Network {
                 .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_ClaimAdjacentToMonumentPacket::handle)
                 .add();
 
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_ProposeWarPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_ProposeWarPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_ProposeWarPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_ProposeWarPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_OpenWarProposalScreenPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_OpenWarProposalScreenPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_OpenWarProposalScreenPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_OpenWarProposalScreenPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_AcceptWarPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_AcceptWarPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_AcceptWarPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_AcceptWarPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket::handle)
+                .add();
+
     }
 }
