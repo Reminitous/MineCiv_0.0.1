@@ -161,8 +161,9 @@ public final class WarTickEvents {
                                     long now) {
 
         war.setPhase(WarState.Phase.ACTIVE);
-        // warEndsAtMs will be set later when we decide duration rules
         warData.putWar(war);
+
+        net.reminitous.mineciv.war.WarHealthManager.initializeIfMissing(level, war);
 
         notifyCiv(level, attacker, Component.literal("⚔ WAR HAS BEGUN!"));
         notifyCiv(level, defender, Component.literal("⚔ WAR HAS BEGUN!"));
