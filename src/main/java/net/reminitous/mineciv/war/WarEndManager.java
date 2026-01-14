@@ -61,7 +61,9 @@ public final class WarEndManager {
         broadcastToCiv(level, winner, Component.literal("🏆 War ended! Winner: " + wName + " | Loser: " + lName));
         broadcastToCiv(level, loser,  Component.literal("💀 War ended! Winner: " + wName + " | Loser: " + lName));
 
-        // Spoils + cooldowns come next step.
+        // Apply spoils + grace/rematch + tax status
+        net.reminitous.mineciv.war.WarSpoilsManager.applySpoilsAndCooldowns(level, winnerCivId, loserCivId);
+
     }
 
     private static void broadcastToCiv(ServerLevel level, Civilization civ, Component msg) {

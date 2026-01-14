@@ -23,6 +23,8 @@ public final class MineCiv {
         ModBlocks.BLOCKS.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
 
+        ModLootModifiers.LOOT_MODIFIERS.register(modBus);
+
         // Initialize networking
         Network.init();
     }

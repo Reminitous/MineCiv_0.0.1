@@ -41,57 +41,48 @@ public final class C2S_AcceptWarPacket {
         ctx.enqueueWork(() -> {
             if (!(player.level() instanceof ServerLevel level)) return;
 
+            // Player must be in a civ and be leader
+            var civOpt = CivilizationManager.findPlayerCiv(level, player.getUUID());
+            if (civOpt.isEmpty()) {
+                player.sendSystemMessage(Component.literal("You are not in a civilization."));
+                return;
+            }
+            Civilization civ = civOpt.get();
+
+            if (civ.leader() == null || !civ.leader().equals(player.getUUID())) {
+                player.sendSystemMessage(Component.literal("Only civilization leaders may respond to war proposals."));
+                return;
+            }
+
             WarSavedData warData = WarSavedData.get(level.getServer());
             WarState war = warData.getWar(msg.warId);
-            if (war == null) return;
+            if (war == null) {
+                player.sendSystemMessage(Component.literal("War proposal not found."));
+                return;
+            }
+
+            // Must be the defender leader
+            if (war.defenderCivId() == null || !war.defenderCivId().equals(civ.id())) {
+                player.sendSystemMessage(Component.literal("You are not the defender for this war proposal."));
+                return;
+            }
 
             if (war.phase() != WarState.Phase.PROPOSED) {
                 player.sendSystemMessage(Component.literal("This war proposal is no longer pending."));
                 return;
             }
 
-            UUID defenderCivId = war.defenderCivId();
-            if (defenderCivId == null) return;
-
-            CivSavedData civData = CivSavedData.get(level.getServer());
-            Civilization defender = civData.getCiv(defenderCivId);
-            if (defender == null) return;
-
-            // Must be defender leader
-            if (defender.leader() == null || !defender.leader().equals(player.getUUID())) {
-                player.sendSystemMessage(Component.literal("Only the defender leader can accept this war."));
-                return;
-            }
-
             long now = System.currentTimeMillis();
-            long prepEnds = now + (long) war.preparationMinutes() * 60_000L;
 
             war.setDefenderAccepted(true);
             war.setPhase(WarState.Phase.PREPARING);
-            war.setPreparationEndsAtMs(prepEnds);
+            war.setPreparationEndsAtMs(now + (long) war.preparationMinutes() * 60L * 1000L);
 
             warData.putWar(war);
 
-            // Notify both civs
-            Civilization attacker = civData.getCiv(war.attackerCivId());
-            String attackerName = attacker == null ? war.attackerCivId().toString() : (attacker.name() == null ? war.attackerCivId().toString() : attacker.name());
-            String defenderName = defender.name() == null ? defenderCivId.toString() : defender.name();
-
-            notifyCiv(level, defender, Component.literal("⚔ War accepted! Preparation: " + war.preparationMinutes() + " minutes."));
-            if (attacker != null) {
-                notifyCiv(level, attacker, Component.literal("⚔ Your war proposal was accepted by " + defenderName + "! Prep: " + war.preparationMinutes() + " minutes."));
-            }
-
-            player.sendSystemMessage(Component.literal("War accepted. It will begin after preparation."));
+            player.sendSystemMessage(Component.literal("War accepted. Preparation started (" + war.preparationMinutes() + " minutes)."));
         });
 
         ctx.setPacketHandled(true);
-    }
-
-    private static void notifyCiv(ServerLevel level, Civilization civ, Component msg) {
-        for (UUID memberId : civ.members()) {
-            ServerPlayer p = level.getServer().getPlayerList().getPlayer(memberId);
-            if (p != null) p.sendSystemMessage(msg);
-        }
     }
 }

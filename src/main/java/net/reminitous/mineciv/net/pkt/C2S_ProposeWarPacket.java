@@ -125,8 +125,6 @@ public final class C2S_ProposeWarPacket {
 
             // Persist
             warData.putWar(war);
-            warData.setActiveWar(attackerCivId, war.warId());
-            warData.setActiveWar(defenderCivId, war.warId());
 
             // Notify attacker
             player.sendSystemMessage(Component.literal(
