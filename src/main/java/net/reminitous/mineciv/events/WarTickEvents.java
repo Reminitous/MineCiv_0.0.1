@@ -11,6 +11,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.reminitous.mineciv.MineCiv;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
+import net.reminitous.mineciv.war.WarEndManager;
 import net.reminitous.mineciv.war.WarHealthManager;
 import net.reminitous.mineciv.war.WarSavedData;
 import net.reminitous.mineciv.war.WarState;
@@ -20,8 +21,7 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = MineCiv.MOD_ID)
 public final class WarTickEvents {
 
-    // tick once per second
-    private static final int PERIOD_TICKS = 20;
+    private static final int PERIOD_TICKS = 20; // once per second
 
     private WarTickEvents() {}
 
@@ -46,6 +46,8 @@ public final class WarTickEvents {
 
         for (WarState war : warData.wars().values()) {
             if (war == null) continue;
+
+            // Skip ended wars
             if (war.phase() == WarState.Phase.ENDED) continue;
 
             UUID aId = war.attackerCivId();
@@ -56,7 +58,7 @@ public final class WarTickEvents {
             Civilization defender = civData.getCiv(dId);
             if (attacker == null || defender == null) continue;
 
-            // If defender accepted -> PREPARING -> ACTIVE when prep time ends
+            // --- Phase transitions ---
             if (war.phase() == WarState.Phase.PREPARING) {
                 if (now >= war.preparationEndsAtMs()) {
                     startActive(level, warData, war, attacker, defender);
@@ -64,14 +66,21 @@ public final class WarTickEvents {
                 continue;
             }
 
-            // If still PROPOSED:
-            // - if declined: preparationEndsAtMs holds force start time (24h)
-            // - if no response: you can later set a different force time; for now it uses the same field if you set it
             if (war.phase() == WarState.Phase.PROPOSED) {
-                long forceAt = war.preparationEndsAtMs();
+                long forceAt = war.preparationEndsAtMs(); // used as force-start timestamp (decline/no-response policy)
                 if (forceAt > 0 && now >= forceAt) {
                     startActive(level, warData, war, attacker, defender);
                 }
+                continue;
+            }
+
+            // --- ACTIVE war: keep checking for end condition ---
+            if (war.phase() == WarState.Phase.ACTIVE) {
+                // Ensure health exists (in case server restarted mid-war)
+                WarHealthManager.initializeIfMissing(level, war);
+
+                // Try end if someone is at/below zero health
+                WarEndManager.tryEndIfDefeated(level, war);
             }
         }
     }
@@ -82,15 +91,14 @@ public final class WarTickEvents {
                                     Civilization attacker,
                                     Civilization defender) {
 
-        // Transition to ACTIVE
         war.setPhase(WarState.Phase.ACTIVE);
         warData.putWar(war);
 
-        // Set "active war" mapping ONLY when ACTIVE
+        // Active mapping should only be set when ACTIVE
         warData.setActiveWar(attacker.id(), war.warId());
         warData.setActiveWar(defender.id(), war.warId());
 
-        // Initialize health snapshot once (Option B)
+        // Initialize health snapshot once
         WarHealthManager.initializeIfMissing(level, war);
 
         // Notify both civs

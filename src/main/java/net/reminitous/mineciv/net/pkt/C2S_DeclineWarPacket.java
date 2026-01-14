@@ -40,7 +40,6 @@ public final class C2S_DeclineWarPacket {
         ctx.enqueueWork(() -> {
             if (!(player.level() instanceof ServerLevel level)) return;
 
-            // Must be leader of defender civ
             var civOpt = CivilizationManager.findPlayerCiv(level, player.getUUID());
             if (civOpt.isEmpty()) {
                 player.sendSystemMessage(Component.literal("You are not in a civilization."));
@@ -49,40 +48,42 @@ public final class C2S_DeclineWarPacket {
             Civilization civ = civOpt.get();
 
             if (civ.leader() == null || !civ.leader().equals(player.getUUID())) {
-                player.sendSystemMessage(Component.literal("Only civilization leaders may respond to war proposals."));
+                player.sendSystemMessage(Component.literal("Only the leader may decline war proposals."));
                 return;
             }
 
             WarSavedData warData = WarSavedData.get(level.getServer());
             WarState war = warData.getWar(msg.warId);
             if (war == null) {
-                player.sendSystemMessage(Component.literal("War proposal not found."));
-                return;
-            }
-
-            if (!civ.id().equals(war.defenderCivId())) {
-                player.sendSystemMessage(Component.literal("You are not the defender for this war."));
+                player.sendSystemMessage(Component.literal("That war proposal no longer exists."));
                 return;
             }
 
             if (war.phase() != WarState.Phase.PROPOSED) {
-                player.sendSystemMessage(Component.literal("This war proposal is no longer pending."));
+                player.sendSystemMessage(Component.literal("That war proposal is no longer pending."));
                 return;
             }
 
-            // Decline → forced war start after 24 hours
-            long forceStartAt =
-                    war.proposedAtMs() + 24L * 60L * 60L * 1000L;
+            if (war.defenderCivId() == null || !war.defenderCivId().equals(civ.id())) {
+                player.sendSystemMessage(Component.literal("You are not the defending civilization for this proposal."));
+                return;
+            }
+
+            long now = System.currentTimeMillis();
+
+            // Decline policy: war starts anyway 24h after decline.
+            // We'll store the "force start time" using preparationEndsAtMs (already used by your tick).
+            long forceStart = now + 24L * 60L * 60L * 1000L;
 
             war.setDefenderAccepted(false);
-            war.setPreparationEndsAtMs(forceStartAt);
+            war.setPreparationEndsAtMs(forceStart);
+
+            // Keep it in PROPOSED so your tick logic starts it when now >= preparationEndsAtMs
             war.setPhase(WarState.Phase.PROPOSED);
 
             warData.putWar(war);
 
-            player.sendSystemMessage(Component.literal(
-                    "War declined. War will automatically begin within 24 hours."
-            ));
+            player.sendSystemMessage(Component.literal("War declined. It will begin in 24 hours unless resolved otherwise."));
         });
 
         ctx.setPacketHandled(true);

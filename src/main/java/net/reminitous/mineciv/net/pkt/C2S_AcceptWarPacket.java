@@ -7,7 +7,6 @@ import net.minecraft.server.level.ServerPlayer;
 
 import net.minecraftforge.event.network.CustomPayloadEvent;
 
-import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.civ.CivilizationManager;
 import net.reminitous.mineciv.war.WarSavedData;
@@ -41,7 +40,6 @@ public final class C2S_AcceptWarPacket {
         ctx.enqueueWork(() -> {
             if (!(player.level() instanceof ServerLevel level)) return;
 
-            // Player must be in a civ and be leader
             var civOpt = CivilizationManager.findPlayerCiv(level, player.getUUID());
             if (civOpt.isEmpty()) {
                 player.sendSystemMessage(Component.literal("You are not in a civilization."));
@@ -50,37 +48,35 @@ public final class C2S_AcceptWarPacket {
             Civilization civ = civOpt.get();
 
             if (civ.leader() == null || !civ.leader().equals(player.getUUID())) {
-                player.sendSystemMessage(Component.literal("Only civilization leaders may respond to war proposals."));
+                player.sendSystemMessage(Component.literal("Only the leader may accept war proposals."));
                 return;
             }
 
             WarSavedData warData = WarSavedData.get(level.getServer());
             WarState war = warData.getWar(msg.warId);
             if (war == null) {
-                player.sendSystemMessage(Component.literal("War proposal not found."));
-                return;
-            }
-
-            // Must be the defender leader
-            if (war.defenderCivId() == null || !war.defenderCivId().equals(civ.id())) {
-                player.sendSystemMessage(Component.literal("You are not the defender for this war proposal."));
+                player.sendSystemMessage(Component.literal("That war proposal no longer exists."));
                 return;
             }
 
             if (war.phase() != WarState.Phase.PROPOSED) {
-                player.sendSystemMessage(Component.literal("This war proposal is no longer pending."));
+                player.sendSystemMessage(Component.literal("That war proposal is no longer pending."));
+                return;
+            }
+
+            if (war.defenderCivId() == null || !war.defenderCivId().equals(civ.id())) {
+                player.sendSystemMessage(Component.literal("You are not the defending civilization for this proposal."));
                 return;
             }
 
             long now = System.currentTimeMillis();
-
-            war.setDefenderAccepted(true);
             war.setPhase(WarState.Phase.PREPARING);
-            war.setPreparationEndsAtMs(now + (long) war.preparationMinutes() * 60L * 1000L);
+            war.setPreparationEndsAtMs(now + war.preparationMinutes() * 60L * 1000L);
+            war.setDefenderAccepted(true);
 
             warData.putWar(war);
 
-            player.sendSystemMessage(Component.literal("War accepted. Preparation started (" + war.preparationMinutes() + " minutes)."));
+            player.sendSystemMessage(Component.literal("War accepted. Preparation time: " + war.preparationMinutes() + " minutes."));
         });
 
         ctx.setPacketHandled(true);
