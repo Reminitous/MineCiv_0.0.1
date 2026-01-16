@@ -6,8 +6,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import net.minecraftforge.network.PacketDistributor;
-
 import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.net.pkt.C2S_AcceptWarPacket;
 import net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket;
@@ -28,28 +26,24 @@ public final class WarProposalScreen extends Screen {
         int cy = this.height / 2;
 
         Button accept = Button.builder(Component.literal("Accept"), b -> onAccept())
-                .bounds(cx - 100, cy + 20, 95, 20)
+                .bounds(cx - 100, cy + 30, 95, 20)
                 .build();
-        this.addRenderableWidget(accept);
 
         Button decline = Button.builder(Component.literal("Decline"), b -> onDecline())
-                .bounds(cx + 5, cy + 20, 95, 20)
+                .bounds(cx + 5, cy + 30, 95, 20)
                 .build();
-        this.addRenderableWidget(decline);
 
-        Button close = Button.builder(Component.literal("Close"), b -> onClose())
-                .bounds(cx - 100, cy + 44, 200, 20)
-                .build();
-        this.addRenderableWidget(close);
+        this.addRenderableWidget(accept);
+        this.addRenderableWidget(decline);
     }
 
     private void onAccept() {
-        Network.CH.send(new C2S_AcceptWarPacket(data.warId), PacketDistributor.SERVER.noArg());
+        Network.CH.send(new C2S_AcceptWarPacket(data.warId), net.minecraftforge.network.PacketDistributor.SERVER.noArg());
         this.onClose();
     }
 
     private void onDecline() {
-        Network.CH.send(new C2S_DeclineWarPacket(data.warId), PacketDistributor.SERVER.noArg());
+        Network.CH.send(new C2S_DeclineWarPacket(data.warId), net.minecraftforge.network.PacketDistributor.SERVER.noArg());
         this.onClose();
     }
 
@@ -63,27 +57,24 @@ public final class WarProposalScreen extends Screen {
         this.renderBackground(gfx, mouseX, mouseY, partialTicks);
 
         int cx = this.width / 2;
-        int y = (this.height / 2) - 50;
+        int y = (this.height / 2) - 55;
 
-        gfx.drawCenteredString(this.font, this.title, cx, y, 0xFFFFFF);
+        gfx.drawCenteredString(this.font, Component.literal("⚔ War Proposal Received"), cx, y, 0xFFFFFF);
         y += 16;
 
         gfx.drawCenteredString(this.font,
-                "From: " + (data.attackerCivName == null || data.attackerCivName.isBlank() ? data.attackerCivId.toString() : data.attackerCivName),
-                cx, y, 0xAAAAAA
-        );
+                Component.literal("Attacker: " + (data.attackerName == null ? "Unknown" : data.attackerName)),
+                cx, y, 0xAAAAAA);
         y += 12;
 
         gfx.drawCenteredString(this.font,
-                "Prep time: " + data.prepMinutes + " minutes",
-                cx, y, 0xAAAAAA
-        );
-        y += 14;
+                Component.literal("Preparation: " + data.preparationMinutes + " minutes"),
+                cx, y, 0xAAAAAA);
+        y += 12;
 
         gfx.drawCenteredString(this.font,
-                "Declining still starts war in 24 hours.",
-                cx, y, 0xFFAA00
-        );
+                Component.literal("Accept starts the prep timer. Decline starts forced war in 24h."),
+                cx, y, 0x777777);
 
         super.render(gfx, mouseX, mouseY, partialTicks);
     }

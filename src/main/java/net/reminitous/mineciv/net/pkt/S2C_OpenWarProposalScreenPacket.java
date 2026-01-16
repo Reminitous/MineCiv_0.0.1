@@ -1,11 +1,11 @@
 package net.reminitous.mineciv.net.pkt;
 
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.client.Minecraft;
 
 import net.minecraftforge.event.network.CustomPayloadEvent;
 
 import net.reminitous.mineciv.client.screen.WarProposalScreen;
+import net.reminitous.mineciv.client.ClientScreens;
 
 import java.util.UUID;
 
@@ -13,41 +13,41 @@ public final class S2C_OpenWarProposalScreenPacket {
 
     public final UUID warId;
     public final UUID attackerCivId;
-    public final String attackerCivName;
-    public final int prepMinutes;
+    public final String attackerName;
+    public final int preparationMinutes;
     public final long proposedAtMs;
 
-    public S2C_OpenWarProposalScreenPacket(UUID warId, UUID attackerCivId, String attackerCivName, int prepMinutes, long proposedAtMs) {
+    public S2C_OpenWarProposalScreenPacket(UUID warId,
+                                           UUID attackerCivId,
+                                           String attackerName,
+                                           int preparationMinutes,
+                                           long proposedAtMs) {
         this.warId = warId;
         this.attackerCivId = attackerCivId;
-        this.attackerCivName = attackerCivName;
-        this.prepMinutes = prepMinutes;
+        this.attackerName = attackerName;
+        this.preparationMinutes = preparationMinutes;
         this.proposedAtMs = proposedAtMs;
     }
 
     public static void encode(S2C_OpenWarProposalScreenPacket msg, FriendlyByteBuf buf) {
         buf.writeUUID(msg.warId);
         buf.writeUUID(msg.attackerCivId);
-        buf.writeUtf(msg.attackerCivName == null ? "" : msg.attackerCivName, 64);
-        buf.writeVarInt(msg.prepMinutes);
+        buf.writeUtf(msg.attackerName == null ? "" : msg.attackerName, 64);
+        buf.writeVarInt(msg.preparationMinutes);
         buf.writeLong(msg.proposedAtMs);
     }
 
     public static S2C_OpenWarProposalScreenPacket decode(FriendlyByteBuf buf) {
         UUID warId = buf.readUUID();
-        UUID attackerId = buf.readUUID();
-        String attackerName = buf.readUtf(64);
+        UUID attacker = buf.readUUID();
+        String name = buf.readUtf(64);
         int prep = buf.readVarInt();
-        long proposedAt = buf.readLong();
-        return new S2C_OpenWarProposalScreenPacket(warId, attackerId, attackerName, prep, proposedAt);
+        long proposed = buf.readLong();
+        return new S2C_OpenWarProposalScreenPacket(warId, attacker, name, prep, proposed);
     }
 
     public static void handle(S2C_OpenWarProposalScreenPacket msg, CustomPayloadEvent.Context ctx) {
-        ctx.enqueueWork(() -> {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player == null) return;
-            mc.setScreen(new WarProposalScreen(msg));
-        });
+        ctx.enqueueWork(() -> ClientScreens.open(new WarProposalScreen(msg)));
         ctx.setPacketHandled(true);
     }
 }

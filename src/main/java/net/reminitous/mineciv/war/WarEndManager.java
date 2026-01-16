@@ -48,6 +48,9 @@ public final class WarEndManager {
         if (war.attackerCivId() != null) warData.setActiveWar(war.attackerCivId(), null);
         if (war.defenderCivId() != null) warData.setActiveWar(war.defenderCivId(), null);
 
+        if (war.attackerCivId() != null) warData.setPendingWar(war.attackerCivId(), null);
+        if (war.defenderCivId() != null) warData.setPendingWar(war.defenderCivId(), null);
+
         // Remove health record (optional: keep for history later)
         WarHealthSavedData.get(server).remove(warId);
 

@@ -12,7 +12,6 @@ import net.minecraftforge.network.PacketDistributor;
 
 import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.net.pkt.C2S_CancelInvitePacket;
-import net.reminitous.mineciv.net.pkt.C2S_ClaimAdjacentToMonumentPacket;
 import net.reminitous.mineciv.net.pkt.C2S_ClaimCurrentChunkPacket;
 import net.reminitous.mineciv.net.pkt.C2S_DisbandCivPacket;
 import net.reminitous.mineciv.net.pkt.C2S_InvitePlayerPacket;
@@ -20,6 +19,7 @@ import net.reminitous.mineciv.net.pkt.C2S_KickMemberPacket;
 import net.reminitous.mineciv.net.pkt.C2S_LeaveCivPacket;
 import net.reminitous.mineciv.net.pkt.C2S_RenameCivPacket;
 import net.reminitous.mineciv.net.pkt.C2S_RequestManageCivDataPacket;
+import net.reminitous.mineciv.net.pkt.C2S_RequestOpenWarProposalPacket;
 import net.reminitous.mineciv.net.pkt.S2C_OpenManageCivScreenPacket;
 
 import java.util.UUID;
@@ -115,52 +115,35 @@ public final class ManageCivScreen extends Screen {
         this.addRenderableWidget(inviteBtn);
 
         // Claim current chunk (leader only)
-        Button claimHere = Button.builder(Component.literal("Claim Current Chunk"), btn -> onClaimCurrentChunk())
+        Button claim = Button.builder(Component.literal("Claim Current Chunk"), btn -> onClaimCurrentChunk())
                 .bounds(cx - 100, cy + 112, 200, 20)
                 .build();
-        claimHere.active = data.isLeader && data.claimCredits > 0;
-        this.addRenderableWidget(claimHere);
+        claim.active = data.isLeader && data.claimCredits > 0;
+        this.addRenderableWidget(claim);
 
-        // Claim adjacent to monument (leader only) - directional buttons
-        Button n = Button.builder(Component.literal("Claim N"), btn -> onClaimDir(C2S_ClaimAdjacentToMonumentPacket.Dir.NORTH))
-                .bounds(cx - 100, cy + 136, 95, 20)
-                .build();
-        n.active = data.isLeader && data.claimCredits > 0;
-        this.addRenderableWidget(n);
+        // --- NEW: Pending war status button (leader only; PROPOSED only) ---
+        if (data.isLeader && data.hasPendingWar && "PROPOSED".equalsIgnoreCase(data.pendingPhase) && data.pendingWarId != null) {
+            Button openWar = Button.builder(Component.literal("Open War Proposal"), btn -> onOpenWarProposal())
+                    .bounds(cx - 100, cy + 160, 200, 20)
+                    .build();
+            this.addRenderableWidget(openWar);
+        }
 
-        Button s = Button.builder(Component.literal("Claim S"), btn -> onClaimDir(C2S_ClaimAdjacentToMonumentPacket.Dir.SOUTH))
-                .bounds(cx + 5, cy + 136, 95, 20)
-                .build();
-        s.active = data.isLeader && data.claimCredits > 0;
-        this.addRenderableWidget(s);
-
-        Button w = Button.builder(Component.literal("Claim W"), btn -> onClaimDir(C2S_ClaimAdjacentToMonumentPacket.Dir.WEST))
-                .bounds(cx - 100, cy + 158, 95, 20)
-                .build();
-        w.active = data.isLeader && data.claimCredits > 0;
-        this.addRenderableWidget(w);
-
-        Button e = Button.builder(Component.literal("Claim E"), btn -> onClaimDir(C2S_ClaimAdjacentToMonumentPacket.Dir.EAST))
-                .bounds(cx + 5, cy + 158, 95, 20)
-                .build();
-        e.active = data.isLeader && data.claimCredits > 0;
-        this.addRenderableWidget(e);
-
-        // Leave / Disband + Close row (moved down to make room)
+        // Leave / Disband + Close row
         if (data.isLeader) {
             Button disband = Button.builder(Component.literal(confirmDisband ? "Confirm Disband" : "Disband Civ"), btn -> onDisband())
-                    .bounds(cx - 100, cy + 182, 95, 20)
+                    .bounds(cx - 100, cy + 136, 95, 20)
                     .build();
             this.addRenderableWidget(disband);
         } else {
             Button leave = Button.builder(Component.literal("Leave Civ"), btn -> onLeave())
-                    .bounds(cx - 100, cy + 182, 95, 20)
+                    .bounds(cx - 100, cy + 136, 95, 20)
                     .build();
             this.addRenderableWidget(leave);
         }
 
         Button close = Button.builder(Component.literal("Close"), btn -> onClose())
-                .bounds(cx + 5, cy + 182, 95, 20)
+                .bounds(cx + 5, cy + 136, 95, 20)
                 .build();
         this.addRenderableWidget(close);
 
@@ -197,7 +180,6 @@ public final class ManageCivScreen extends Screen {
 
         Network.CH.send(new C2S_InvitePlayerPacket(data.monumentPos, data.civId, target), PacketDistributor.SERVER.noArg());
         inviteBox.setValue("");
-
         requestRefresh();
     }
 
@@ -215,15 +197,12 @@ public final class ManageCivScreen extends Screen {
         requestRefresh();
     }
 
-    private void onClaimDir(C2S_ClaimAdjacentToMonumentPacket.Dir dir) {
+    private void onOpenWarProposal() {
         if (!data.isLeader) return;
+        if (!data.hasPendingWar || data.pendingWarId == null) return;
+        if (!"PROPOSED".equalsIgnoreCase(data.pendingPhase)) return;
 
-        Network.CH.send(
-                new C2S_ClaimAdjacentToMonumentPacket(data.monumentPos, data.civId, dir),
-                PacketDistributor.SERVER.noArg()
-        );
-
-        requestRefresh();
+        Network.CH.send(new C2S_RequestOpenWarProposalPacket(data.pendingWarId), PacketDistributor.SERVER.noArg());
     }
 
     private void onLeave() {
@@ -288,6 +267,21 @@ public final class ManageCivScreen extends Screen {
         y += 12;
         gfx.drawCenteredString(this.font, "Members: " + data.memberCount + (data.isLeader ? " (Leader)" : ""), cx, y, 0xAAAAAA);
 
+        // --- NEW: Pending war status line ---
+        y += 14;
+        if (data.hasPendingWar) {
+            String opp = (data.pendingOpponentName == null || data.pendingOpponentName.isBlank())
+                    ? String.valueOf(data.pendingOpponentCivId)
+                    : data.pendingOpponentName;
+            String phase = (data.pendingPhase == null || data.pendingPhase.isBlank()) ? "UNKNOWN" : data.pendingPhase;
+
+            gfx.drawCenteredString(this.font,
+                    "War: " + phase + " vs " + opp,
+                    cx, y, 0xFFCC55);
+        } else {
+            gfx.drawCenteredString(this.font, "War: None", cx, y, 0x55FF55);
+        }
+
         // Members
         int listY = (this.height / 2) - 5;
         int shown = 0;
@@ -314,7 +308,7 @@ public final class ManageCivScreen extends Screen {
         gfx.drawString(this.font, "Invite player (online):", cx - 100, (this.height / 2) + 78, 0xAAAAAA);
 
         if (confirmDisband) {
-            gfx.drawString(this.font, "Click Confirm Disband to permanently delete this civ.", cx - 100, (this.height / 2) + 205, 0xFF5555);
+            gfx.drawString(this.font, "Click Confirm Disband to permanently delete this civ.", cx - 100, (this.height / 2) + 160, 0xFF5555);
         }
 
         super.render(gfx, mouseX, mouseY, partialTicks);

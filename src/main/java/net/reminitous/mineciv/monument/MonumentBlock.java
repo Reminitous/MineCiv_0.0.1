@@ -19,6 +19,7 @@ import net.minecraft.world.phys.BlockHitResult;
 
 import net.minecraftforge.network.PacketDistributor;
 
+import net.reminitous.mineciv.civ.CivClassType;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.net.Network;
@@ -26,8 +27,12 @@ import net.reminitous.mineciv.net.pkt.S2C_OpenCreateCivScreenPacket;
 import net.reminitous.mineciv.net.pkt.S2C_OpenManageCivScreenPacket;
 import net.reminitous.mineciv.territory.TerritoryManager;
 
+import net.reminitous.mineciv.war.WarSavedData;
+import net.reminitous.mineciv.war.WarState;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class MonumentBlock extends BaseEntityBlock {
@@ -61,12 +66,10 @@ public final class MonumentBlock extends BaseEntityBlock {
 
         InteractionResult res = handleRightClick(level, pos, player);
 
-        // If we handled it, consume so the held item doesn't activate.
         if (res.consumesAction()) {
             return ItemInteractionResult.SUCCESS;
         }
 
-        // Otherwise let vanilla proceed
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
@@ -74,7 +77,6 @@ public final class MonumentBlock extends BaseEntityBlock {
 
     private static InteractionResult handleRightClick(Level level, BlockPos pos, Player player) {
         if (level.isClientSide) {
-            // Client: let server decide; return success to avoid item use
             return InteractionResult.SUCCESS;
         }
         if (!(level instanceof ServerLevel sLevel)) return InteractionResult.PASS;
@@ -88,7 +90,6 @@ public final class MonumentBlock extends BaseEntityBlock {
             UUID civId = monumentBE.getCivId();
             CivSavedData data = CivSavedData.get(sLevel.getServer());
 
-            // If civ missing, monument crumbles
             if (civId == null || data.getCiv(civId) == null) {
                 sLevel.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
                 sPlayer.sendSystemMessage(Component.literal("This monument has crumbled due to inactivity."));
@@ -98,7 +99,6 @@ public final class MonumentBlock extends BaseEntityBlock {
 
         // ---------------- Open correct UI ----------------
         if (!monumentBE.isBound()) {
-            // Open "Create Civ" screen
             Network.CH.send(
                     new S2C_OpenCreateCivScreenPacket(pos),
                     PacketDistributor.PLAYER.with(sPlayer)
@@ -106,11 +106,12 @@ public final class MonumentBlock extends BaseEntityBlock {
             return InteractionResult.SUCCESS;
         }
 
-        // Bound -> open "Manage Civ" screen with current snapshot
         UUID civId = monumentBE.getCivId();
         if (civId == null) return InteractionResult.SUCCESS;
 
-        CivSavedData data = CivSavedData.get(sLevel.getServer());
+        var server = sLevel.getServer();
+
+        CivSavedData data = CivSavedData.get(server);
         Civilization civ = data.getCiv(civId);
         if (civ == null) return InteractionResult.SUCCESS;
 
@@ -118,17 +119,59 @@ public final class MonumentBlock extends BaseEntityBlock {
 
         List<UUID> members = new ArrayList<>(civ.members());
 
-        // If you store pending invites elsewhere, replace this list accordingly.
+        // Pending invites from CivSavedData
         List<UUID> pendingInvites = new ArrayList<>();
+        for (Map.Entry<UUID, UUID> e : data.pendingInvites().entrySet()) {
+            if (civId.equals(e.getValue())) pendingInvites.add(e.getKey());
+        }
 
         int claimedChunks = civ.claimedChunks().size();
         int maxChunks = TerritoryManager.MAX_CHUNKS;
 
+        // ---------------- Pending war snapshot (NEW) ----------------
+        boolean hasPendingWar = false;
+        UUID pendingWarId = null;
+        String pendingPhase = "";
+        UUID pendingOpponentCivId = new UUID(0L, 0L);
+        String pendingOpponentName = "";
+        long pendingStartsAtMs = 0L;
+        int pendingPrepMinutes = 0;
+
+        WarSavedData warData = WarSavedData.get(server);
+        UUID pw = warData.getPendingWarId(civ.id());
+        if (pw != null) {
+            WarState w = warData.getWar(pw);
+            if (w != null && w.phase() != WarState.Phase.ENDED) {
+                hasPendingWar = true;
+                pendingWarId = w.warId();
+                pendingPhase = w.phase().name();
+                pendingPrepMinutes = w.preparationMinutes();
+
+                UUID opp = civ.id().equals(w.attackerCivId()) ? w.defenderCivId() : w.attackerCivId();
+                pendingOpponentCivId = (opp == null) ? new UUID(0L, 0L) : opp;
+
+                Civilization oppCiv = (opp == null) ? null : data.getCiv(opp);
+                pendingOpponentName = (oppCiv != null && oppCiv.name() != null && !oppCiv.name().isBlank())
+                        ? oppCiv.name()
+                        : String.valueOf(opp);
+
+                if (w.phase() == WarState.Phase.PREPARING) {
+                    pendingStartsAtMs = w.preparationEndsAtMs();
+                } else if (w.phase() == WarState.Phase.PROPOSED) {
+                    long a = w.preparationEndsAtMs();
+                    long b = w.leaderOnlineDeadlineMs();
+                    pendingStartsAtMs = (a <= 0) ? b : (b <= 0 ? a : Math.min(a, b));
+                } else {
+                    pendingStartsAtMs = 0L;
+                }
+            }
+        }
+
         S2C_OpenManageCivScreenPacket pkt = new S2C_OpenManageCivScreenPacket(
                 pos,
                 civ.id(),
-                civ.name(),
-                civ.classType(),
+                civ.name() == null ? "" : civ.name(),
+                civ.classType() == null ? CivClassType.AGRICULTURAL : civ.classType(),
                 civ.civLevel(),
                 civ.civXp(),
                 civ.members().size(),
@@ -137,7 +180,16 @@ public final class MonumentBlock extends BaseEntityBlock {
                 pendingInvites,
                 civ.claimCredits(),
                 claimedChunks,
-                maxChunks
+                maxChunks,
+
+                // NEW pending war fields:
+                hasPendingWar,
+                pendingWarId,
+                pendingPhase,
+                pendingOpponentCivId,
+                pendingOpponentName,
+                pendingStartsAtMs,
+                pendingPrepMinutes
         );
 
         Network.CH.send(pkt, PacketDistributor.PLAYER.with(sPlayer));

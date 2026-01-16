@@ -8,6 +8,8 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+import net.minecraft.server.MinecraftServer;
+
 import net.reminitous.mineciv.MineCiv;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
@@ -21,7 +23,7 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = MineCiv.MOD_ID)
 public final class WarTickEvents {
 
-    private static final int PERIOD_TICKS = 20; // once per second
+    private static final int PERIOD_TICKS = 20;
 
     private WarTickEvents() {}
 
@@ -29,7 +31,7 @@ public final class WarTickEvents {
     public static void onServerTick(TickEvent.ServerTickEvent e) {
         if (e.phase != TickEvent.Phase.END) return;
 
-        var server = e.getServer();
+        MinecraftServer server = e.getServer();
         if (server.getTickCount() % PERIOD_TICKS != 0) return;
 
         ServerLevel overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
@@ -46,8 +48,6 @@ public final class WarTickEvents {
 
         for (WarState war : warData.wars().values()) {
             if (war == null) continue;
-
-            // Skip ended wars
             if (war.phase() == WarState.Phase.ENDED) continue;
 
             UUID aId = war.attackerCivId();
@@ -58,7 +58,7 @@ public final class WarTickEvents {
             Civilization defender = civData.getCiv(dId);
             if (attacker == null || defender == null) continue;
 
-            // --- Phase transitions ---
+            // PREPARING -> ACTIVE when prep ends
             if (war.phase() == WarState.Phase.PREPARING) {
                 if (now >= war.preparationEndsAtMs()) {
                     startActive(level, warData, war, attacker, defender);
@@ -66,22 +66,81 @@ public final class WarTickEvents {
                 continue;
             }
 
+            // PROPOSED: countdown warnings + auto-start
             if (war.phase() == WarState.Phase.PROPOSED) {
-                long forceAt = war.preparationEndsAtMs(); // used as force-start timestamp (decline/no-response policy)
-                if (forceAt > 0 && now >= forceAt) {
+                // warnings only apply if leader deadline exists and leader is online
+                maybeSendLeaderCountdownWarnings(level, civData, warData, war, defender, now);
+
+                long forceAt = war.preparationEndsAtMs();
+                long leaderAt = war.leaderOnlineDeadlineMs();
+
+                long earliest = 0L;
+                if (forceAt > 0L) earliest = forceAt;
+                if (leaderAt > 0L) earliest = (earliest == 0L) ? leaderAt : Math.min(earliest, leaderAt);
+
+                if (earliest > 0L && now >= earliest) {
                     startActive(level, warData, war, attacker, defender);
                 }
                 continue;
             }
 
-            // --- ACTIVE war: keep checking for end condition ---
+            // ACTIVE: ensure health exists, and end if defeated
             if (war.phase() == WarState.Phase.ACTIVE) {
-                // Ensure health exists (in case server restarted mid-war)
                 WarHealthManager.initializeIfMissing(level, war);
-
-                // Try end if someone is at/below zero health
                 WarEndManager.tryEndIfDefeated(level, war);
             }
+        }
+    }
+
+    /**
+     * Sends defender leader warnings at 30/10/5/1 minutes remaining.
+     * Uses a persistent bitmask in WarState so messages are only sent once.
+     */
+    private static void maybeSendLeaderCountdownWarnings(ServerLevel level,
+                                                         CivSavedData civData,
+                                                         WarSavedData warData,
+                                                         WarState war,
+                                                         Civilization defender,
+                                                         long now) {
+
+        long deadline = war.leaderOnlineDeadlineMs();
+        if (deadline <= 0L) return;
+
+        long remainingMs = deadline - now;
+        if (remainingMs <= 0L) return;
+
+        UUID leaderId = defender.leader();
+        if (leaderId == null) return;
+
+        ServerPlayer leader = level.getServer().getPlayerList().getPlayer(leaderId);
+        if (leader == null) return; // only warn while leader is online
+
+        long remainingMinutes = (remainingMs + 59_999L) / 60_000L; // ceil minutes
+
+        int mask = war.leaderWarnMask();
+
+        // threshold -> bit index
+        // 30m -> bit0, 10m -> bit1, 5m -> bit2, 1m -> bit3
+        if (remainingMinutes <= 30 && (mask & 1) == 0) {
+            leader.sendSystemMessage(Component.literal("⚠ War proposal: 30 minutes remaining to respond."));
+            mask |= 1;
+        }
+        if (remainingMinutes <= 10 && (mask & 2) == 0) {
+            leader.sendSystemMessage(Component.literal("⚠ War proposal: 10 minutes remaining to respond."));
+            mask |= 2;
+        }
+        if (remainingMinutes <= 5 && (mask & 4) == 0) {
+            leader.sendSystemMessage(Component.literal("⚠ War proposal: 5 minutes remaining to respond."));
+            mask |= 4;
+        }
+        if (remainingMinutes <= 1 && (mask & 8) == 0) {
+            leader.sendSystemMessage(Component.literal("⚠ War proposal: 1 minute remaining to respond."));
+            mask |= 8;
+        }
+
+        if (mask != war.leaderWarnMask()) {
+            war.setLeaderWarnMask(mask);
+            warData.putWar(war);
         }
     }
 
@@ -94,14 +153,11 @@ public final class WarTickEvents {
         war.setPhase(WarState.Phase.ACTIVE);
         warData.putWar(war);
 
-        // Active mapping should only be set when ACTIVE
         warData.setActiveWar(attacker.id(), war.warId());
         warData.setActiveWar(defender.id(), war.warId());
 
-        // Initialize health snapshot once
         WarHealthManager.initializeIfMissing(level, war);
 
-        // Notify both civs
         notifyCiv(level, attacker, Component.literal("⚔ WAR HAS BEGUN against " + safeName(defender)));
         notifyCiv(level, defender, Component.literal("⚔ WAR HAS BEGUN against " + safeName(attacker)));
     }
