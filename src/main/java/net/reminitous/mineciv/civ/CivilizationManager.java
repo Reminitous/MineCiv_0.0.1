@@ -1,10 +1,22 @@
 package net.reminitous.mineciv.civ;
 
-import net.reminitous.mineciv.territory.TerritoryManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
+import net.minecraftforge.network.PacketDistributor;
+
+import net.reminitous.mineciv.monument.MonumentBlockEntity;
+import net.reminitous.mineciv.net.Network;
+import net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket;
+import net.reminitous.mineciv.territory.TerritoryManager;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,8 +33,8 @@ public final class CivilizationManager {
     }
 
     public static boolean canCreateCiv(ServerLevel level, UUID playerId, ChunkPos chunk) {
-        if (findPlayerCiv(level, playerId).isPresent()) return false; // already in civ
-        return TerritoryManager.getOwnerCivId(level, chunk) == null;    // chunk free
+        if (findPlayerCiv(level, playerId).isPresent()) return false;
+        return TerritoryManager.getOwnerCivId(level, chunk) == null;
     }
 
     public static Civilization createCiv(ServerLevel level,
@@ -31,7 +43,7 @@ public final class CivilizationManager {
                                          CivClassType classType,
                                          BlockPos monumentPos) {
 
-        CivSavedData data = CivSavedData.get(level.getServer()); // GLOBAL (Overworld)
+        CivSavedData data = CivSavedData.get(level.getServer());
 
         UUID civId = UUID.randomUUID();
         Civilization civ = new Civilization(civId);
@@ -43,22 +55,18 @@ public final class CivilizationManager {
         civ.setLastActiveEpochMs(System.currentTimeMillis());
         civ.setMonument(level.dimension().location().toString(), monumentPos);
 
-        // Persist civ
         data.putCiv(civ);
-
-        // IMPORTANT: bind player -> civ mapping (this is what your command reads)
         data.setPlayersCiv(leaderId, civId);
 
-        // Claim the monument chunk using Overworld storage authority
         ChunkPos cp = new ChunkPos(monumentPos);
-        ServerLevel overworld = level.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        ServerLevel overworld = level.getServer().getLevel(Level.OVERWORLD);
         if (overworld == null) {
             data.removeCiv(civId);
             data.setPlayersCiv(leaderId, null);
             throw new IllegalStateException("Overworld is null");
         }
 
-        boolean claimed = net.reminitous.mineciv.territory.TerritoryManager.claimChunk(overworld, civId, cp);
+        boolean claimed = TerritoryManager.claimChunk(overworld, civId, cp);
         if (!claimed) {
             data.removeCiv(civId);
             data.setPlayersCiv(leaderId, null);
@@ -73,18 +81,17 @@ public final class CivilizationManager {
         Civilization civ = data.getCiv(civId);
         if (civ == null) return false;
 
-        // can't be in another civ
         if (findPlayerCiv(level, newMemberId).isPresent()) return false;
-
         if (civ.members().size() >= maxMembers) return false;
 
         civ.addMember(newMemberId);
+
         if (civ.members().size() > civ.highestMemberCountEver()) {
             civ.setHighestMemberCountEver(civ.members().size());
-            // TODO: grant “new high member count” XP here
         }
 
         data.putCiv(civ);
+        data.setPlayersCiv(newMemberId, civId);
         return true;
     }
 
@@ -94,15 +101,16 @@ public final class CivilizationManager {
         if (civ == null) return false;
 
         civ.removeMember(memberId);
-
         data.putCiv(civ);
+
+        data.setPlayersCiv(memberId, null);
         return true;
     }
 
     public static void touchActive(ServerLevel level, UUID playerId) {
         findPlayerCiv(level, playerId).ifPresent(civ -> {
             civ.setLastActiveEpochMs(System.currentTimeMillis());
-            CivSavedData.get(level.getServer()).putCiv(civ); // GLOBAL, not dimension-scoped
+            CivSavedData.get(level.getServer()).putCiv(civ);
         });
     }
 
@@ -114,184 +122,72 @@ public final class CivilizationManager {
         return a.relationTo(civB) == RelationType.ALLY && b.relationTo(civA) == RelationType.ALLY;
     }
 
-    public static boolean requestAlliance(ServerLevel level, UUID fromCivId, UUID toCivId) {
-        if (fromCivId == null || toCivId == null) return false;
-        if (fromCivId.equals(toCivId)) return false;
-
-        CivSavedData data = CivSavedData.get(level.getServer());
-        Civilization from = data.getCiv(fromCivId);
-        Civilization to = data.getCiv(toCivId);
-        if (from == null || to == null) return false;
-
-        // already allies
-        if (from.isAlly(toCivId) && to.isAlly(fromCivId)) return false;
-
-        // add incoming request on target
-        to.addIncomingAllyRequest(fromCivId);
-        data.putCiv(to);
-        return true;
-    }
-
-    public static boolean acceptAlliance(ServerLevel level, UUID acceptingCivId, UUID fromCivId) {
-        if (acceptingCivId == null || fromCivId == null) return false;
-        if (acceptingCivId.equals(fromCivId)) return false;
-
-        CivSavedData data = CivSavedData.get(level.getServer());
-        Civilization accepting = data.getCiv(acceptingCivId);
-        Civilization from = data.getCiv(fromCivId);
-        if (accepting == null || from == null) return false;
-
-        if (!accepting.hasIncomingAllyRequest(fromCivId)) return false;
-
-        accepting.removeIncomingAllyRequest(fromCivId);
-        accepting.addAlly(fromCivId);
-        from.addAlly(acceptingCivId);
-
-        data.putCiv(accepting);
-        data.putCiv(from);
-        return true;
-    }
-
-    public static boolean declineAlliance(ServerLevel level, UUID acceptingCivId, UUID fromCivId) {
-        if (acceptingCivId == null || fromCivId == null) return false;
-
-        CivSavedData data = CivSavedData.get(level.getServer());
-        Civilization accepting = data.getCiv(acceptingCivId);
-        if (accepting == null) return false;
-
-        if (!accepting.hasIncomingAllyRequest(fromCivId)) return false;
-
-        accepting.removeIncomingAllyRequest(fromCivId);
-        data.putCiv(accepting);
-        return true;
-    }
-
-    public static boolean removeAlliance(ServerLevel level, UUID civA, UUID civB) {
-        if (civA == null || civB == null) return false;
-
-        CivSavedData data = CivSavedData.get(level.getServer());
-        Civilization a = data.getCiv(civA);
-        Civilization b = data.getCiv(civB);
-        if (a == null || b == null) return false;
-
-        a.removeAlly(civB);
-        b.removeAlly(civA);
-
-        data.putCiv(a);
-        data.putCiv(b);
-        return true;
-    }
-
-    public static void awardCivXp(ServerLevel level, UUID playerId, long xp) {
-        if (xp <= 0) return;
-
-        CivSavedData data = CivSavedData.get(level.getServer());
-        Optional<Civilization> civOpt = findPlayerCiv(level, playerId);
-        if (civOpt.isEmpty()) return;
-
-        Civilization civ = civOpt.get();
-        int beforeLevel = civ.civLevel();
-        civ.addCivXp(xp);
-
-        data.putCiv(civ);
-
-        if (civ.civLevel() > beforeLevel) {
-            // Later: trigger expansion unlocks / NPC spawns / announcements
-            net.reminitous.mineciv.MineCiv.LOGGER.info("MineCiv: Civ {} leveled up to {}", civ.id(), civ.civLevel());
-        }
-    }
+    /* =========================================================
+       DISBAND (leader interacts with monument + confirm prompt)
+       ========================================================= */
 
     public static boolean disbandCiv(ServerLevel level, UUID civId, UUID requesterPlayerId, BlockPos monumentPos) {
         if (civId == null || requesterPlayerId == null || monumentPos == null) return false;
 
-        var server = level.getServer();
+        MinecraftServer server = level.getServer();
         CivSavedData data = CivSavedData.get(server);
 
         Civilization civ = data.getCiv(civId);
         if (civ == null) return false;
 
-        // Only leader can disband
+        // Must be leader
         if (civ.leader() == null || !civ.leader().equals(requesterPlayerId)) return false;
 
-        // Must match monument location to prevent spoof packets
+        // Must match this civ's monument position
         if (civ.monumentPos() == null || !civ.monumentPos().equals(monumentPos)) return false;
 
-        // Authority for claims is Overworld (your project pattern)
-        ServerLevel overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
-        if (overworld == null) overworld = level;
+        // Must be bound monument BE for this civ (prevents spoof packets)
+        if (!level.hasChunkAt(monumentPos)) return false;
 
-        // Collect member list now (we need it after cleanup for notifications)
-        java.util.List<UUID> members = new java.util.ArrayList<>(civ.members());
+        BlockEntity be = level.getBlockEntity(monumentPos);
+        if (!(be instanceof MonumentBlockEntity mbe)) return false;
+        if (!mbe.isBound()) return false;
+        if (mbe.getCivId() == null || !mbe.getCivId().equals(civId)) return false;
 
-        // 1) Broadcast + close UI for all ONLINE members
-        net.minecraft.network.chat.Component msg = net.minecraft.network.chat.Component.literal(
-                "⚠ Your civilization has been disbanded by the leader."
-        );
-
-        for (UUID memberId : members) {
-            net.minecraft.server.level.ServerPlayer p = server.getPlayerList().getPlayer(memberId);
+        // 0) Close MineCiv UI for all online members BEFORE deleting state
+        for (UUID memberId : civ.members()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(memberId);
             if (p != null) {
-                p.sendSystemMessage(msg);
-
-                // Close screen if they have it open (safe even if they don’t)
-                net.reminitous.mineciv.net.Network.CH.send(
-                        new net.reminitous.mineciv.net.pkt.S2C_CloseScreenPacket(),
-                        net.minecraftforge.network.PacketDistributor.PLAYER.with(p)
-                );
+                Network.CH.send(new S2C_ForceCloseMineCivUiPacket(), PacketDistributor.PLAYER.with(p));
             }
         }
 
-        // 2) Unclaim all chunks
-        java.util.List<Long> claims = new java.util.ArrayList<>(civ.claimedChunks());
-        for (long chunkLong : claims) {
-            net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkLong);
-            net.reminitous.mineciv.territory.TerritoryManager.unclaimChunk(overworld, civId, cp);
+        // 1) Broadcast message to all members (online)
+        String civName = (civ.name() == null || civ.name().isEmpty()) ? civId.toString() : civ.name();
+        var broadcast = net.minecraft.network.chat.Component.literal("🏳 Civilization disbanded: " + civName);
+
+        for (UUID memberId : civ.members()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(memberId);
+            if (p != null) p.sendSystemMessage(broadcast);
         }
 
-        // 3) Clear player->civ mapping for all members
-        for (UUID memberId : members) {
-            data.setPlayersCiv(memberId, null);
-        }
-
-        // 4) Remove pending invites that point at this civ
-        data.pendingInvites().entrySet().removeIf(e -> civId.equals(e.getValue()));
-
-// 5) Release civ NPCs (do NOT delete): replace MineCiv villagers with normal villagers
-        java.util.List<UUID> npcIds = new java.util.ArrayList<>(civ.npcIds());
+        // 2) Release NPCs as normal villagers (Option 2 replacement)
+        List<UUID> npcIds = new ArrayList<>(civ.npcIds());
 
         for (var dimLevel : server.getAllLevels()) {
             for (UUID npcId : npcIds) {
                 var ent = dimLevel.getEntity(npcId);
                 if (ent == null) continue;
 
-                // Only our MineCiv villager-NPCs should be in npcIds, but we still check type safely.
                 if (ent instanceof net.minecraft.world.entity.npc.Villager oldV) {
-
-                    // Spawn a replacement vanilla villager with the same villager data & position.
                     net.minecraft.world.entity.npc.Villager newV =
                             net.minecraft.world.entity.EntityType.VILLAGER.create(dimLevel);
 
                     if (newV != null) {
                         newV.moveTo(oldV.getX(), oldV.getY(), oldV.getZ(), oldV.getYRot(), oldV.getXRot());
-
-                        // Keep biome/profession/level data so it feels continuous
                         newV.setVillagerData(oldV.getVillagerData());
-
-                        // Remove MineCiv naming so it's clearly "released"
                         newV.setCustomName(null);
                         newV.setCustomNameVisible(false);
-
-                        // IMPORTANT: do NOT call setPersistenceRequired() on the new villager.
-                        // This ensures it can despawn normally.
-
+                        // Do NOT call setPersistenceRequired() => despawns normally
                         dimLevel.addFreshEntity(newV);
                     }
-
-                    // Remove the old MineCiv villager
                     oldV.discard();
-
                 } else {
-                    // Non-villager entities in npcIds (shouldn't happen): just strip our tags and leave them
                     ent.getPersistentData().remove("MineCivCivId");
                     ent.getPersistentData().remove("MineCivRole");
                     ent.getPersistentData().remove("MineCivHomeMonument");
@@ -299,28 +195,38 @@ public final class CivilizationManager {
             }
         }
 
-// Stop tracking NPC ids
         for (UUID npcId : npcIds) civ.removeNpcId(npcId);
 
+        // 3) Unclaim all claimed chunks (Overworld authority)
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        if (overworld == null) overworld = level;
 
-// Clear tracking set
-        for (UUID npcId : npcIds) civ.removeNpcId(npcId);
-
-
-        // Clear tracking set
-        for (UUID npcId : npcIds) civ.removeNpcId(npcId);
-
-        // 6) Destroy monument block
-        if (overworld.hasChunkAt(monumentPos)) {
-            overworld.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
-        } else if (level.hasChunkAt(monumentPos)) {
-            level.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        List<Long> claimed = new ArrayList<>(civ.claimedChunks());
+        for (long chunkLong : claimed) {
+            ChunkPos cp = new ChunkPos(chunkLong);
+            TerritoryManager.unclaimChunk(overworld, civId, cp);
         }
 
-        // 7) Remove civ record
+        // 4) Remove player->civ mapping for all members
+        for (UUID memberId : civ.members()) {
+            data.setPlayersCiv(memberId, null);
+        }
+
+        // 5) Clear pending invites pointing to this civ
+        List<UUID> toClearInvites = new ArrayList<>();
+        for (var e : data.pendingInvites().entrySet()) {
+            if (civId.equals(e.getValue())) toClearInvites.add(e.getKey());
+        }
+        for (UUID invited : toClearInvites) {
+            data.setPendingInvite(invited, null);
+        }
+
+        // 6) Destroy monument block
+        level.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+
+        // 7) Delete civ record
         data.removeCiv(civId);
 
         return true;
     }
-
 }

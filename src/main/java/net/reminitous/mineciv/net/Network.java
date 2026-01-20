@@ -140,5 +140,24 @@ public final class Network {
                 .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket::handle)
                 .add();
 
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmPopupPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmPopupPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmPopupPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmPopupPacket::handle)
+                .add();
+
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.C2S_ConfirmDisbandPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.C2S_ConfirmDisbandPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.C2S_ConfirmDisbandPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_ConfirmDisbandPacket::handle)
+                .add();
+
+
     }
 }

@@ -6,10 +6,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
-import net.minecraftforge.network.PacketDistributor;
-
 import net.reminitous.mineciv.net.Network;
-import net.reminitous.mineciv.net.pkt.C2S_DisbandCivPacket;
+import net.reminitous.mineciv.net.pkt.C2S_ConfirmDisbandPacket;
 
 import java.util.UUID;
 
@@ -31,19 +29,20 @@ public final class DisbandConfirmScreen extends Screen {
         int cx = this.width / 2;
         int cy = this.height / 2;
 
-        Button disband = Button.builder(Component.literal("DISBAND"), btn -> onDisband())
-                .bounds(cx - 100, cy + 25, 200, 20)
+        Button confirm = Button.builder(Component.literal("Confirm Disband"), b -> onConfirm())
+                .bounds(cx - 100, cy + 10, 200, 20)
                 .build();
-        this.addRenderableWidget(disband);
+        this.addRenderableWidget(confirm);
 
-        Button cancel = Button.builder(Component.literal("Cancel"), btn -> onClose())
-                .bounds(cx - 100, cy + 50, 200, 20)
+        Button cancel = Button.builder(Component.literal("Cancel"), b -> onClose())
+                .bounds(cx - 100, cy + 35, 200, 20)
                 .build();
         this.addRenderableWidget(cancel);
     }
 
-    private void onDisband() {
-        Network.CH.send(new C2S_DisbandCivPacket(monumentPos, civId), PacketDistributor.SERVER.noArg());
+    private void onConfirm() {
+        Network.CH.send(new C2S_ConfirmDisbandPacket(monumentPos, civId),
+                net.minecraftforge.network.PacketDistributor.SERVER.noArg());
         this.onClose();
     }
 
@@ -57,20 +56,15 @@ public final class DisbandConfirmScreen extends Screen {
         this.renderBackground(gfx, mouseX, mouseY, partialTicks);
 
         int cx = this.width / 2;
-        int y = (this.height / 2) - 45;
+        int cy = this.height / 2;
 
-        gfx.drawCenteredString(this.font, this.title, cx, y, 0xFFFFFF);
-        y += 14;
+        String nameLine = civName.isEmpty() ? ("Civ: " + civId) : ("Civ: " + civName);
 
-        gfx.drawCenteredString(this.font, "Are you sure you want to disband:", cx, y, 0xAAAAAA);
-        y += 12;
+        gfx.drawCenteredString(this.font, this.title, cx, cy - 45, 0xFFFFFF);
+        gfx.drawCenteredString(this.font, nameLine, cx, cy - 28, 0xAAAAAA);
 
-        gfx.drawCenteredString(this.font, civName.isEmpty() ? "(Unnamed Civ)" : civName, cx, y, 0xFFFFFF);
-        y += 14;
-
-        gfx.drawCenteredString(this.font, "This will destroy the monument,", cx, y, 0xFF5555);
-        y += 12;
-        gfx.drawCenteredString(this.font, "unclaim territory, and release NPCs.", cx, y, 0xFF5555);
+        gfx.drawCenteredString(this.font, "This will permanently delete the civ,", cx, cy - 8, 0xFF5555);
+        gfx.drawCenteredString(this.font, "destroy the monument, and release NPCs.", cx, cy + 4, 0xFF5555);
 
         super.render(gfx, mouseX, mouseY, partialTicks);
     }

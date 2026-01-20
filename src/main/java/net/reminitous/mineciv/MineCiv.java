@@ -10,6 +10,9 @@ import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.registry.ModBlockEntities;
 import net.reminitous.mineciv.registry.ModBlocks;
 import net.reminitous.mineciv.registry.ModLootModifiers;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
+
 
 @Mod(MineCiv.MOD_ID)
 public final class MineCiv {
@@ -26,6 +29,12 @@ public final class MineCiv {
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModLootModifiers.LOOT_MODIFIERS.register(modBus);
         Network.init();
+
+        private static void addCreative(BuildCreativeModeTabContentsEvent event) {
+            if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+                event.accept(net.reminitous.mineciv.registry.ModBlocks.MONUMENT.get());
+            }
+        }
 
     }
 }
