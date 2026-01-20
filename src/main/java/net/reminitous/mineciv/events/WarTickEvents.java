@@ -13,10 +13,7 @@ import net.minecraft.server.MinecraftServer;
 import net.reminitous.mineciv.MineCiv;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
-import net.reminitous.mineciv.war.WarEndManager;
-import net.reminitous.mineciv.war.WarHealthManager;
-import net.reminitous.mineciv.war.WarSavedData;
-import net.reminitous.mineciv.war.WarState;
+import net.reminitous.mineciv.war.*;
 
 import java.util.UUID;
 
@@ -37,7 +34,7 @@ public final class WarTickEvents {
         ServerLevel overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
         if (overworld == null) return;
 
-        tick(overworld);
+        WarTickTransitions.tick(overworld);
     }
 
     private static void tick(ServerLevel level) {
