@@ -95,11 +95,6 @@ public final class CivilizationManager {
 
         civ.removeMember(memberId);
 
-        // if leader leaves, you can pick a new leader or disband; define your policy
-        if (civ.leader() != null && civ.leader().equals(memberId)) {
-            // TODO: choose successor or disband
-        }
-
         data.putCiv(civ);
         return true;
     }
@@ -205,5 +200,67 @@ public final class CivilizationManager {
             net.reminitous.mineciv.MineCiv.LOGGER.info("MineCiv: Civ {} leveled up to {}", civ.id(), civ.civLevel());
         }
     }
+
+    public static boolean disbandCiv(ServerLevel level, UUID civId, UUID requesterPlayerId, BlockPos monumentPos) {
+        if (civId == null || requesterPlayerId == null || monumentPos == null) return false;
+
+        var server = level.getServer();
+        CivSavedData data = CivSavedData.get(server);
+
+        Civilization civ = data.getCiv(civId);
+        if (civ == null) return false;
+
+        // Only leader can disband
+        if (civ.leader() == null || !civ.leader().equals(requesterPlayerId)) return false;
+
+        // Must match monument location to prevent spoof packets
+        if (civ.monumentPos() == null || !civ.monumentPos().equals(monumentPos)) return false;
+
+        // Authority for claims is Overworld (your project pattern)
+        ServerLevel overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        if (overworld == null) overworld = level;
+
+        // 1) Unclaim all chunks
+        java.util.List<Long> claims = new java.util.ArrayList<>(civ.claimedChunks());
+        for (long chunkLong : claims) {
+            net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkLong);
+            net.reminitous.mineciv.territory.TerritoryManager.unclaimChunk(overworld, civId, cp);
+        }
+
+        // 2) Clear player->civ mapping for all members
+        for (UUID memberId : new java.util.ArrayList<>(civ.members())) {
+            data.setPlayersCiv(memberId, null);
+        }
+
+        // 3) Remove pending invites that point at this civ
+        data.pendingInvites().entrySet().removeIf(e -> civId.equals(e.getValue()));
+
+        // 4) Remove civ NPCs (v1: delete them)
+        // We try all dimensions, because an NPC might be in overworld even if monumentDim differs.
+        for (ServerLevel dimLevel : server.getAllLevels()) {
+            for (UUID npcId : new java.util.ArrayList<>(civ.npcIds())) {
+                var ent = dimLevel.getEntity(npcId);
+                if (ent != null) ent.discard();
+            }
+        }
+        // Clear ids in civ record (not strictly needed since civ is removed, but keeps it tidy)
+        for (UUID npcId : new java.util.ArrayList<>(civ.npcIds())) {
+            civ.removeNpcId(npcId);
+        }
+
+        // 5) Destroy monument block
+        if (overworld.hasChunkAt(monumentPos)) {
+            overworld.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        } else if (level.hasChunkAt(monumentPos)) {
+            level.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        }
+
+        // 6) Remove civ (also clears chunkOwner + invites via your CivSavedData.removeCiv)
+        data.removeCiv(civId);
+
+        return true;
+    }
+
+
 
 }
