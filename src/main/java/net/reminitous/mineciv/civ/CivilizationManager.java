@@ -220,47 +220,73 @@ public final class CivilizationManager {
         ServerLevel overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
         if (overworld == null) overworld = level;
 
-        // 1) Unclaim all chunks
+        // Collect member list now (we need it after cleanup for notifications)
+        java.util.List<UUID> members = new java.util.ArrayList<>(civ.members());
+
+        // 1) Broadcast + close UI for all ONLINE members
+        net.minecraft.network.chat.Component msg = net.minecraft.network.chat.Component.literal(
+                "⚠ Your civilization has been disbanded by the leader."
+        );
+
+        for (UUID memberId : members) {
+            net.minecraft.server.level.ServerPlayer p = server.getPlayerList().getPlayer(memberId);
+            if (p != null) {
+                p.sendSystemMessage(msg);
+
+                // Close screen if they have it open (safe even if they don’t)
+                net.reminitous.mineciv.net.Network.CH.send(
+                        new net.reminitous.mineciv.net.pkt.S2C_CloseScreenPacket(),
+                        net.minecraftforge.network.PacketDistributor.PLAYER.with(p)
+                );
+            }
+        }
+
+        // 2) Unclaim all chunks
         java.util.List<Long> claims = new java.util.ArrayList<>(civ.claimedChunks());
         for (long chunkLong : claims) {
             net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkLong);
             net.reminitous.mineciv.territory.TerritoryManager.unclaimChunk(overworld, civId, cp);
         }
 
-        // 2) Clear player->civ mapping for all members
-        for (UUID memberId : new java.util.ArrayList<>(civ.members())) {
+        // 3) Clear player->civ mapping for all members
+        for (UUID memberId : members) {
             data.setPlayersCiv(memberId, null);
         }
 
-        // 3) Remove pending invites that point at this civ
+        // 4) Remove pending invites that point at this civ
         data.pendingInvites().entrySet().removeIf(e -> civId.equals(e.getValue()));
 
-        // 4) Remove civ NPCs (v1: delete them)
-        // We try all dimensions, because an NPC might be in overworld even if monumentDim differs.
-        for (ServerLevel dimLevel : server.getAllLevels()) {
-            for (UUID npcId : new java.util.ArrayList<>(civ.npcIds())) {
+        // 5) Release civ NPCs (do NOT delete): clear tags + stop tracking them
+        // We scan all dimensions because villagers might have wandered or been moved.
+        java.util.List<UUID> npcIds = new java.util.ArrayList<>(civ.npcIds());
+
+        for (var dimLevel : server.getAllLevels()) {
+            for (UUID npcId : npcIds) {
                 var ent = dimLevel.getEntity(npcId);
-                if (ent != null) ent.discard();
+                if (ent != null) {
+                    // Remove MineCiv ownership tags so it becomes a normal villager
+                    ent.getPersistentData().remove("MineCivCivId");
+                    ent.getPersistentData().remove("MineCivRole");
+                    ent.getPersistentData().remove("MineCivHomeMonument");
+                    // NOTE: we leave persistence as-is; if you want them to despawn normally, tell me.
+                }
             }
         }
-        // Clear ids in civ record (not strictly needed since civ is removed, but keeps it tidy)
-        for (UUID npcId : new java.util.ArrayList<>(civ.npcIds())) {
-            civ.removeNpcId(npcId);
-        }
 
-        // 5) Destroy monument block
+        // Clear tracking set
+        for (UUID npcId : npcIds) civ.removeNpcId(npcId);
+
+        // 6) Destroy monument block
         if (overworld.hasChunkAt(monumentPos)) {
             overworld.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
         } else if (level.hasChunkAt(monumentPos)) {
             level.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
         }
 
-        // 6) Remove civ (also clears chunkOwner + invites via your CivSavedData.removeCiv)
+        // 7) Remove civ record
         data.removeCiv(civId);
 
         return true;
     }
-
-
 
 }
