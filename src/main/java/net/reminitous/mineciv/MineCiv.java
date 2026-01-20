@@ -22,10 +22,11 @@ public final class MineCiv {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         ModBlocks.BLOCKS.register(modBus);
+        ModBlocks.ITEMS.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModLootModifiers.LOOT_MODIFIERS.register(modBus);
-
         Network.init();
+
     }
 }
 

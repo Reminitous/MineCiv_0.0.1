@@ -134,23 +134,5 @@ public final class Network {
                 .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket::handle)
                 .add();
 
-        CH.messageBuilder(S2C_OpenWarProposalScreenPacket.class, id++)
-                .encoder(S2C_OpenWarProposalScreenPacket::encode)
-                .decoder(S2C_OpenWarProposalScreenPacket::decode)
-                .consumerMainThread(S2C_OpenWarProposalScreenPacket::handle)
-                .add();
-
-        CH.messageBuilder(C2S_AcceptWarPacket.class, id++)
-                .encoder(C2S_AcceptWarPacket::encode)
-                .decoder(C2S_AcceptWarPacket::decode)
-                .consumerMainThread(C2S_AcceptWarPacket::handle)
-                .add();
-
-        CH.messageBuilder(C2S_DeclineWarPacket.class, id++)
-                .encoder(C2S_DeclineWarPacket::encode)
-                .decoder(C2S_DeclineWarPacket::decode)
-                .consumerMainThread(C2S_DeclineWarPacket::handle)
-                .add();
-
     }
 }

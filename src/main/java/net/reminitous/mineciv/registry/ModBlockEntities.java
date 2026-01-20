@@ -14,16 +14,9 @@ public final class ModBlockEntities {
             DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MineCiv.MOD_ID);
 
     public static final RegistryObject<BlockEntityType<MonumentBlockEntity>> MONUMENT =
-            BLOCK_ENTITIES.register(
-                    "monument",
-                    () -> BlockEntityType.Builder
-                            .of(
-                                    MonumentBlockEntity::new,
-                                    ModBlocks.MONUMENT.getHolder().orElseThrow().value()
-                            )
-                            .build(null)
+            BLOCK_ENTITIES.register("monument",
+                    () -> BlockEntityType.Builder.of(MonumentBlockEntity::new, ModBlocks.MONUMENT.get()).build(null)
             );
-
 
     private ModBlockEntities() {}
 }
