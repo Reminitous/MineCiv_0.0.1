@@ -256,22 +256,56 @@ public final class CivilizationManager {
         // 4) Remove pending invites that point at this civ
         data.pendingInvites().entrySet().removeIf(e -> civId.equals(e.getValue()));
 
-        // 5) Release civ NPCs (do NOT delete): clear tags + stop tracking them
-        // We scan all dimensions because villagers might have wandered or been moved.
+// 5) Release civ NPCs (do NOT delete): replace MineCiv villagers with normal villagers
         java.util.List<UUID> npcIds = new java.util.ArrayList<>(civ.npcIds());
 
         for (var dimLevel : server.getAllLevels()) {
             for (UUID npcId : npcIds) {
                 var ent = dimLevel.getEntity(npcId);
-                if (ent != null) {
-                    // Remove MineCiv ownership tags so it becomes a normal villager
+                if (ent == null) continue;
+
+                // Only our MineCiv villager-NPCs should be in npcIds, but we still check type safely.
+                if (ent instanceof net.minecraft.world.entity.npc.Villager oldV) {
+
+                    // Spawn a replacement vanilla villager with the same villager data & position.
+                    net.minecraft.world.entity.npc.Villager newV =
+                            net.minecraft.world.entity.EntityType.VILLAGER.create(dimLevel);
+
+                    if (newV != null) {
+                        newV.moveTo(oldV.getX(), oldV.getY(), oldV.getZ(), oldV.getYRot(), oldV.getXRot());
+
+                        // Keep biome/profession/level data so it feels continuous
+                        newV.setVillagerData(oldV.getVillagerData());
+
+                        // Remove MineCiv naming so it's clearly "released"
+                        newV.setCustomName(null);
+                        newV.setCustomNameVisible(false);
+
+                        // IMPORTANT: do NOT call setPersistenceRequired() on the new villager.
+                        // This ensures it can despawn normally.
+
+                        dimLevel.addFreshEntity(newV);
+                    }
+
+                    // Remove the old MineCiv villager
+                    oldV.discard();
+
+                } else {
+                    // Non-villager entities in npcIds (shouldn't happen): just strip our tags and leave them
                     ent.getPersistentData().remove("MineCivCivId");
                     ent.getPersistentData().remove("MineCivRole");
                     ent.getPersistentData().remove("MineCivHomeMonument");
-                    // NOTE: we leave persistence as-is; if you want them to despawn normally, tell me.
                 }
             }
         }
+
+// Stop tracking NPC ids
+        for (UUID npcId : npcIds) civ.removeNpcId(npcId);
+
+
+// Clear tracking set
+        for (UUID npcId : npcIds) civ.removeNpcId(npcId);
+
 
         // Clear tracking set
         for (UUID npcId : npcIds) civ.removeNpcId(npcId);
