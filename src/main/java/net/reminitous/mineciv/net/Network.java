@@ -134,5 +134,11 @@ public final class Network {
                 .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_DeclineWarPacket::handle)
                 .add();
 
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket::handle)
+                .add();
+
     }
 }

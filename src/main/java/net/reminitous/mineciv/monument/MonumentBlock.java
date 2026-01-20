@@ -117,6 +117,20 @@ public final class MonumentBlock extends BaseEntityBlock {
 
         boolean isLeader = civ.leader() != null && civ.leader().equals(sPlayer.getUUID());
 
+        // Leader-only: Shift + right click opens disband confirmation prompt
+        if (isLeader && sPlayer.isShiftKeyDown()) {
+            Network.CH.send(
+                    new net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket(
+                            pos,
+                            civ.id(),
+                            civ.name() == null ? "" : civ.name()
+                    ),
+                    PacketDistributor.PLAYER.with(sPlayer)
+            );
+            return InteractionResult.SUCCESS;
+        }
+
+
         List<UUID> members = new ArrayList<>(civ.members());
 
         // Pending invites from CivSavedData
