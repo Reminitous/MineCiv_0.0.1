@@ -1,6 +1,8 @@
 package net.reminitous.mineciv;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -10,9 +12,6 @@ import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.registry.ModBlockEntities;
 import net.reminitous.mineciv.registry.ModBlocks;
 import net.reminitous.mineciv.registry.ModLootModifiers;
-import net.minecraft.world.item.CreativeModeTabs;
-import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
-
 
 @Mod(MineCiv.MOD_ID)
 public final class MineCiv {
@@ -21,21 +20,25 @@ public final class MineCiv {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public MineCiv() {
-        // Forge 52.1.8: this is the correct mod event bus source
+        // Correct mod event bus (Forge 1.21.1+)
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
 
+        // Register content
         ModBlocks.BLOCKS.register(modBus);
         ModBlocks.ITEMS.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModLootModifiers.LOOT_MODIFIERS.register(modBus);
+
+        // Creative tab contents
+        modBus.addListener(this::addCreative);
+
+        // Networking
         Network.init();
+    }
 
-        private static void addCreative(BuildCreativeModeTabContentsEvent event) {
-            if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
-                event.accept(net.reminitous.mineciv.registry.ModBlocks.MONUMENT.get());
-            }
+    private void addCreative(BuildCreativeModeTabContentsEvent event) {
+        if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+            event.accept(ModBlocks.MONUMENT_ITEM.get());
         }
-
     }
 }
-

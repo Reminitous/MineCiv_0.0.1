@@ -122,6 +122,88 @@ public final class CivilizationManager {
         return a.relationTo(civB) == RelationType.ALLY && b.relationTo(civA) == RelationType.ALLY;
     }
 
+    /* ---------------- Alliances ---------------- */
+
+    public static boolean requestAlliance(ServerLevel level, UUID fromCivId, UUID toCivId) {
+        if (level == null) return false;
+        if (fromCivId == null || toCivId == null) return false;
+        if (fromCivId.equals(toCivId)) return false;
+
+        CivSavedData data = CivSavedData.get(level.getServer());
+        Civilization from = data.getCiv(fromCivId);
+        Civilization to = data.getCiv(toCivId);
+        if (from == null || to == null) return false;
+
+        // already allies both ways
+        if (from.isAlly(toCivId) && to.isAlly(fromCivId)) return false;
+
+        // already requested?
+        if (to.hasIncomingAllyRequest(fromCivId)) return false;
+
+        // store request on target civ
+        to.addIncomingAllyRequest(fromCivId);
+        data.putCiv(to);
+        return true;
+    }
+
+    public static boolean acceptAlliance(ServerLevel level, UUID acceptingCivId, UUID fromCivId) {
+        if (level == null) return false;
+        if (acceptingCivId == null || fromCivId == null) return false;
+        if (acceptingCivId.equals(fromCivId)) return false;
+
+        CivSavedData data = CivSavedData.get(level.getServer());
+        Civilization accepting = data.getCiv(acceptingCivId);
+        Civilization from = data.getCiv(fromCivId);
+        if (accepting == null || from == null) return false;
+
+        // must have an incoming request
+        if (!accepting.hasIncomingAllyRequest(fromCivId)) return false;
+
+        accepting.removeIncomingAllyRequest(fromCivId);
+
+        // add allies both ways
+        accepting.addAlly(fromCivId);
+        from.addAlly(acceptingCivId);
+
+        // persist both
+        data.putCiv(accepting);
+        data.putCiv(from);
+        return true;
+    }
+
+    public static boolean declineAlliance(ServerLevel level, UUID acceptingCivId, UUID fromCivId) {
+        if (level == null) return false;
+        if (acceptingCivId == null || fromCivId == null) return false;
+
+        CivSavedData data = CivSavedData.get(level.getServer());
+        Civilization accepting = data.getCiv(acceptingCivId);
+        if (accepting == null) return false;
+
+        if (!accepting.hasIncomingAllyRequest(fromCivId)) return false;
+
+        accepting.removeIncomingAllyRequest(fromCivId);
+        data.putCiv(accepting);
+        return true;
+    }
+
+    public static boolean removeAlliance(ServerLevel level, UUID civA, UUID civB) {
+        if (level == null) return false;
+        if (civA == null || civB == null) return false;
+        if (civA.equals(civB)) return false;
+
+        CivSavedData data = CivSavedData.get(level.getServer());
+        Civilization a = data.getCiv(civA);
+        Civilization b = data.getCiv(civB);
+        if (a == null || b == null) return false;
+
+        a.removeAlly(civB);
+        b.removeAlly(civA);
+
+        data.putCiv(a);
+        data.putCiv(b);
+        return true;
+    }
+
     /* =========================================================
        DISBAND (leader interacts with monument + confirm prompt)
        ========================================================= */
@@ -229,4 +311,34 @@ public final class CivilizationManager {
 
         return true;
     }
+
+    /* ---------------- Civ XP ---------------- */
+
+    public static void awardCivXp(ServerLevel level, UUID playerId, long xp) {
+        if (level == null) return;
+        if (playerId == null) return;
+        if (xp <= 0) return;
+
+        // Global authority is overworld
+        CivSavedData data = CivSavedData.get(level.getServer());
+
+        Optional<Civilization> civOpt = findPlayerCiv(level, playerId);
+        if (civOpt.isEmpty()) return;
+
+        Civilization civ = civOpt.get();
+
+        int beforeLevel = civ.civLevel();
+        civ.addCivXp(xp);
+
+        data.putCiv(civ);
+
+        // Optional: log level-ups
+        if (civ.civLevel() > beforeLevel) {
+            net.reminitous.mineciv.MineCiv.LOGGER.info(
+                    "MineCiv: Civ {} leveled up to {}",
+                    civ.id(), civ.civLevel()
+            );
+        }
+    }
+
 }
