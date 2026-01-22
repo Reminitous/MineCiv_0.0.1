@@ -12,7 +12,10 @@ import java.util.UUID;
 public final class TerritoryManager {
 
     public static final int MAX_CHUNKS = 100;     // 10x10
-    private static final int MAX_SPAN = 10;       // max width/height in chunk coords
+    public static final int MAX_SPAN  = 10;       // max width/height in chunk coords
+
+    // NEW: at least 3 chunk gap from any other civ territory boundary
+    public static final int MIN_TERRITORY_GAP = 3;
 
     private TerritoryManager() {}
 
@@ -22,7 +25,8 @@ public final class TerritoryManager {
         CIV_NOT_FOUND,
         MAX_CHUNKS_REACHED,
         NOT_ADJACENT,
-        TOO_WIDE
+        TOO_WIDE,
+        TOO_CLOSE_TO_OTHER_TERRITORY
     }
 
     public static UUID getOwnerCivId(ServerLevel level, ChunkPos cp) {
@@ -34,18 +38,6 @@ public final class TerritoryManager {
         return getOwnerCivId(level, new ChunkPos(pos));
     }
 
-    /** Backwards-compatible boolean wrapper. */
-    public static boolean claimChunk(ServerLevel level, UUID civId, ChunkPos cp) {
-        return claimChunkDetailed(level, civId, cp) == ClaimResult.SUCCESS;
-    }
-
-    /**
-     * Claims a chunk for civId, enforcing:
-     * - chunk must be unclaimed
-     * - total claims <= 100
-     * - expansion must be edge-adjacent (except first claim)
-     * - claims must fit inside a 10x10 bounding box in chunk coords
-     */
     public static ClaimResult claimChunkDetailed(ServerLevel level, UUID civId, ChunkPos cp) {
         CivSavedData data = CivSavedData.get(level.getServer());
 
@@ -57,10 +49,15 @@ public final class TerritoryManager {
         int current = civ.claimedChunks().size();
         if (current >= MAX_CHUNKS) return ClaimResult.MAX_CHUNKS_REACHED;
 
-        // Adjacency rule (skip if this is the first claim)
+        // NEW: gap rule vs other civs (skip if you want first claim to ignore this — but you said ALL territories)
+        if (isTooCloseToOtherTerritory(data, civId, cp, MIN_TERRITORY_GAP)) {
+            return ClaimResult.TOO_CLOSE_TO_OTHER_TERRITORY;
+        }
+
+        // Adjacency rule (skip if first claim)
         if (current > 0 && !isAdjacentToExisting(civ, cp)) return ClaimResult.NOT_ADJACENT;
 
-        // Bounding 10x10 rule
+        // Bounding box rule
         if (!fitsBoundingBox(civ, cp)) return ClaimResult.TOO_WIDE;
 
         // Apply claim
@@ -69,6 +66,10 @@ public final class TerritoryManager {
         data.putCiv(civ);
 
         return ClaimResult.SUCCESS;
+    }
+
+    public static boolean claimChunk(ServerLevel level, UUID civId, ChunkPos cp) {
+        return claimChunkDetailed(level, civId, cp) == ClaimResult.SUCCESS;
     }
 
     public static void unclaimChunk(ServerLevel level, UUID civId, ChunkPos cp) {
@@ -82,18 +83,6 @@ public final class TerritoryManager {
             data.putCiv(civ);
         }
         data.setChunkOwner(cp.toLong(), null);
-    }
-
-    public static void unclaimAllChunks(ServerLevel level, UUID civId) {
-        CivSavedData data = CivSavedData.get(level.getServer());
-        Civilization civ = data.getCiv(civId);
-        if (civ == null) return;
-
-        java.util.List<Long> claimed = new java.util.ArrayList<>(civ.claimedChunks());
-        for (long chunkLong : claimed) {
-            ChunkPos cp = new ChunkPos(chunkLong);
-            unclaimChunk(level, civId, cp);
-        }
     }
 
     private static boolean isAdjacentToExisting(Civilization civ, ChunkPos cp) {
@@ -136,5 +125,30 @@ public final class TerritoryManager {
         int spanZ = maxZ - minZ + 1;
 
         return spanX <= MAX_SPAN && spanZ <= MAX_SPAN;
+    }
+
+    /**
+     * Returns true if candidate is within `gap` chunks of ANY chunk owned by a DIFFERENT civ.
+     * Uses Chebyshev distance (square radius): |dx|<=gap AND |dz|<=gap.
+     */
+    private static boolean isTooCloseToOtherTerritory(CivSavedData data, UUID claimingCivId, ChunkPos candidate, int gap) {
+        int cx = candidate.x;
+        int cz = candidate.z;
+
+        for (var entry : data.chunkOwner().entrySet()) {
+            UUID owner = entry.getValue();
+            if (owner == null) continue;
+            if (owner.equals(claimingCivId)) continue;
+
+            ChunkPos other = new ChunkPos(entry.getKey());
+            int dx = Math.abs(other.x - cx);
+            int dz = Math.abs(other.z - cz);
+
+            if (dx <= gap && dz <= gap) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

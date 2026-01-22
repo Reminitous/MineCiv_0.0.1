@@ -158,6 +158,11 @@ public final class Network {
                 .consumerMainThread(net.reminitous.mineciv.net.pkt.C2S_ConfirmDisbandPacket::handle)
                 .add();
 
+        CH.messageBuilder(net.reminitous.mineciv.net.pkt.S2C_ClaimFeedbackPacket.class, id++)
+                .encoder(net.reminitous.mineciv.net.pkt.S2C_ClaimFeedbackPacket::encode)
+                .decoder(net.reminitous.mineciv.net.pkt.S2C_ClaimFeedbackPacket::decode)
+                .consumerMainThread(net.reminitous.mineciv.net.pkt.S2C_ClaimFeedbackPacket::handle)
+                .add();
 
     }
 }
