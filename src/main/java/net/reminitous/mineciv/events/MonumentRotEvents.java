@@ -101,11 +101,22 @@ public final class MonumentRotEvents {
 
     /* ---------------- Core rot logic ---------------- */
 
+    private static void unclaimAllForCiv(ServerLevel overworld, UUID civId, net.reminitous.mineciv.civ.Civilization civ) {
+        if (civ == null || civId == null) return;
+
+        // Copy to avoid concurrent modification while removing
+        java.util.List<Long> claimed = new java.util.ArrayList<>(civ.claimedChunks());
+        for (long chunkLong : claimed) {
+            net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkLong);
+            net.reminitous.mineciv.territory.TerritoryManager.unclaimChunk(overworld, civId, cp);
+        }
+    }
+
     private static void rotCiv(MinecraftServer server, ServerLevel overworld, CivSavedData data, Civilization civ) {
         UUID civId = civ.id();
 
         // 1) Unclaim all chunks immediately (structures remain)
-        TerritoryManager.unclaimAllChunks(overworld, civId);
+        unclaimAllForCiv(overworld, civId, civ);
 
         // 2) Clear player->civ mapping for members
         for (UUID member : civ.members()) {

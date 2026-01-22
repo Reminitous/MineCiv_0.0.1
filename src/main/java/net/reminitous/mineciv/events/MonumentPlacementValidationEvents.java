@@ -22,8 +22,9 @@ public final class MonumentPlacementValidationEvents {
 
     private MonumentPlacementValidationEvents() {}
 
-    // Tuning knobs
-    private static final int MIN_CHUNKS_FROM_SPAWN = 25;
+    // ---- Tuning knobs (in CHUNKS) ----
+    public static final int MIN_CHUNKS_FROM_SPAWN = 25;
+    public static final int MIN_CHUNKS_BETWEEN_MONUMENTS = 25;
 
     @SubscribeEvent
     public static void onPlace(BlockEvent.EntityPlaceEvent e) {
@@ -35,34 +36,16 @@ public final class MonumentPlacementValidationEvents {
 
         BlockPos pos = e.getPos();
 
-        // Rule: Overworld only (change/remove if you want multi-dim)
-        if (!level.dimension().equals(Level.OVERWORLD)) {
+        // Rule: Overworld only
+        if (level.dimension() != Level.OVERWORLD) {
             e.setCanceled(true);
             player.sendSystemMessage(Component.literal("Monuments can only be placed in the Overworld."));
             return;
         }
 
-        // Rule: must be >= 25 chunks from spawn (distance measured in chunks)
-        ChunkPos spawnCp = new ChunkPos(level.getSharedSpawnPos());
-        ChunkPos placeCp = new ChunkPos(pos);
-
-        int dx = placeCp.x - spawnCp.x;
-        int dz = placeCp.z - spawnCp.z;
-
-        // Use squared distance in chunk coords
-        int dist2 = dx * dx + dz * dz;
-        int min2 = MIN_CHUNKS_FROM_SPAWN * MIN_CHUNKS_FROM_SPAWN;
-
-        if (dist2 < min2) {
-            e.setCanceled(true);
-            player.sendSystemMessage(Component.literal(
-                    "Monuments must be at least " + MIN_CHUNKS_FROM_SPAWN + " chunks from spawn."
-            ));
-            return;
-        }
+        CivSavedData data = CivSavedData.get(level.getServer());
 
         // Rule: must NOT already be in a civ
-        CivSavedData data = CivSavedData.get(level.getServer());
         UUID myCiv = data.getPlayersCiv(player.getUUID());
         if (myCiv != null) {
             e.setCanceled(true);
@@ -79,10 +62,50 @@ public final class MonumentPlacementValidationEvents {
             return;
         }
 
-        // Rule: only one Monument per chunk (check block entities already in the chunk)
+        // Rule: cannot place within MIN_CHUNKS_FROM_SPAWN chunks of world spawn (distance in chunks)
+        BlockPos spawn = level.getSharedSpawnPos();
+        ChunkPos spawnChunk = new ChunkPos(spawn);
+        int dxSpawn = Math.abs(cp.x - spawnChunk.x);
+        int dzSpawn = Math.abs(cp.z - spawnChunk.z);
+        int chebSpawn = Math.max(dxSpawn, dzSpawn); // chunk-square distance
+
+        if (chebSpawn < MIN_CHUNKS_FROM_SPAWN) {
+            e.setCanceled(true);
+            player.sendSystemMessage(Component.literal(
+                    "Monuments must be at least " + MIN_CHUNKS_FROM_SPAWN + " chunks from spawn."
+            ));
+            return;
+        }
+
+        // Rule: cannot place within MIN_CHUNKS_BETWEEN_MONUMENTS chunks of another civ's monument (distance in chunks)
+        for (var civ : data.civs().values()) {
+            BlockPos mPos = civ.monumentPos();
+            if (mPos == null) continue;
+
+            // Only compare monuments in the overworld (your current design)
+            String dim = civ.monumentDimId();
+            if (dim == null) continue;
+            if (!dim.equals(Level.OVERWORLD.location().toString())) continue;
+
+            ChunkPos other = new ChunkPos(mPos);
+
+            int dx = Math.abs(cp.x - other.x);
+            int dz = Math.abs(cp.z - other.z);
+            int cheb = Math.max(dx, dz);
+
+            if (cheb < MIN_CHUNKS_BETWEEN_MONUMENTS) {
+                e.setCanceled(true);
+                player.sendSystemMessage(Component.literal(
+                        "Monuments must be at least " + MIN_CHUNKS_BETWEEN_MONUMENTS + " chunks from other monuments."
+                ));
+                return;
+            }
+        }
+
+        // Rule: only one Monument per chunk (block entity scan)
         var chunk = level.getChunkAt(pos);
-        boolean alreadyHasMonument = chunk.getBlockEntities().values().stream()
-                .anyMatch(be -> be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity);
+        boolean alreadyHasMonument = chunk.getBlockEntitiesPos().stream()
+                .anyMatch(bePos -> chunk.getBlockEntity(bePos) instanceof net.reminitous.mineciv.monument.MonumentBlockEntity);
 
         if (alreadyHasMonument) {
             e.setCanceled(true);
