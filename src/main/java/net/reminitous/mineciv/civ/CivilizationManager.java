@@ -411,4 +411,103 @@ public final class CivilizationManager {
         return true;
     }
 
+    public static boolean disbandCivFromMonumentBreak(ServerLevel level, BlockPos monumentPos) {
+        if (level == null || monumentPos == null) return false;
+
+        var server = level.getServer();
+        CivSavedData data = CivSavedData.get(server);
+
+        // Require loaded chunk (don’t force-load)
+        if (!level.hasChunkAt(monumentPos)) return false;
+
+        BlockEntity be = level.getBlockEntity(monumentPos);
+        if (!(be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity mbe)) return false;
+        if (!mbe.isBound() || mbe.getCivId() == null) return false;
+
+        UUID civId = mbe.getCivId();
+        Civilization civ = data.getCiv(civId);
+        if (civ == null) return false;
+
+        // Close UI + broadcast to online members
+        String civName = (civ.name() == null || civ.name().isBlank()) ? civId.toString() : civ.name();
+        var msg = net.minecraft.network.chat.Component.literal("🏳 Civilization disbanded (Monument destroyed): " + civName);
+
+        for (UUID memberId : civ.members()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(memberId);
+            if (p != null) {
+                p.sendSystemMessage(msg);
+
+                // If you have this packet already, keep it; otherwise remove these 2 lines.
+                net.reminitous.mineciv.net.Network.CH.send(
+                        new net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket(),
+                        net.minecraftforge.network.PacketDistributor.PLAYER.with(p)
+                );
+            }
+        }
+
+        // Overworld authority for claims (your project pattern)
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        if (overworld == null) overworld = level;
+
+        // Remove / release NPCs: (keeping your “Option 2: release into normal villagers” behavior)
+        List<UUID> npcIds = new ArrayList<>(civ.npcIds());
+        for (var dimLevel : server.getAllLevels()) {
+            for (UUID npcId : npcIds) {
+                var ent = dimLevel.getEntity(npcId);
+                if (ent == null) continue;
+
+                if (ent instanceof net.minecraft.world.entity.npc.Villager oldV) {
+                    net.minecraft.world.entity.npc.Villager newV =
+                            net.minecraft.world.entity.EntityType.VILLAGER.create(dimLevel);
+
+                    if (newV != null) {
+                        newV.moveTo(oldV.getX(), oldV.getY(), oldV.getZ(), oldV.getYRot(), oldV.getXRot());
+                        newV.setVillagerData(oldV.getVillagerData());
+                        newV.setCustomName(null);
+                        newV.setCustomNameVisible(false);
+                        // Do NOT call setPersistenceRequired(); it should despawn normally.
+                        dimLevel.addFreshEntity(newV);
+                    }
+                    oldV.discard();
+                } else {
+                    ent.discard();
+                }
+            }
+        }
+        for (UUID npcId : npcIds) civ.removeNpcId(npcId);
+
+        // Unclaim all chunks
+        List<Long> claimed = new ArrayList<>(civ.claimedChunks());
+        for (long chunkLong : claimed) {
+            ChunkPos cp = new ChunkPos(chunkLong);
+            TerritoryManager.unclaimChunk(overworld, civId, cp);
+        }
+
+        // Clear player->civ mapping for all members
+        for (UUID memberId : new ArrayList<>(civ.members())) {
+            data.setPlayersCiv(memberId, null);
+        }
+
+        // Clear pending invites pointing to this civ
+        List<UUID> toClearInvites = new ArrayList<>();
+        for (var e : data.pendingInvites().entrySet()) {
+            if (civId.equals(e.getValue())) toClearInvites.add(e.getKey());
+        }
+        for (UUID invited : toClearInvites) {
+            data.setPendingInvite(invited, null);
+        }
+
+        // Destroy monument block (best effort)
+        if (overworld.hasChunkAt(monumentPos)) {
+            overworld.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        } else {
+            level.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        }
+
+        // Remove civ record
+        data.removeCiv(civId);
+
+        return true;
+    }
+
 }
