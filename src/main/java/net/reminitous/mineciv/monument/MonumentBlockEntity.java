@@ -26,9 +26,15 @@ public final class MonumentBlockEntity extends BlockEntity {
         return civId != null;
     }
 
-    public void setCivId(UUID civId) {
+    /** Preferred binding method used by packets + server logic. */
+    public void bindToCiv(UUID civId) {
         this.civId = civId;
         setChanged();
+    }
+
+    /** Backwards-compatible alias (if older code still calls setCivId). */
+    public void setCivId(UUID civId) {
+        bindToCiv(civId);
     }
 
     /* ---------------- NBT (1.21.1 signatures) ---------------- */
@@ -36,9 +42,7 @@ public final class MonumentBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider provider) {
         super.saveAdditional(tag, provider);
-        if (civId != null) {
-            tag.putUUID("CivId", civId);
-        }
+        if (civId != null) tag.putUUID("CivId", civId);
     }
 
     @Override

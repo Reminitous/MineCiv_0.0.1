@@ -3,12 +3,16 @@ package net.reminitous.mineciv.net.pkt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 
 import net.minecraftforge.event.network.CustomPayloadEvent;
 
 import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.civ.CivilizationManager;
+import net.reminitous.mineciv.monument.MonumentBlockEntity;
+import net.reminitous.mineciv.registry.ModBlocks;
 
 public final class C2S_CreateCivPacket {
 
@@ -21,6 +25,8 @@ public final class C2S_CreateCivPacket {
         this.classType = classType;
         this.monumentPos = monumentPos;
     }
+
+    /* ---------------- Serialization ---------------- */
 
     public static void encode(C2S_CreateCivPacket msg, FriendlyByteBuf buf) {
         buf.writeUtf(msg.name, 32);
@@ -35,9 +41,10 @@ public final class C2S_CreateCivPacket {
         return new C2S_CreateCivPacket(name, type, pos);
     }
 
+    /* ---------------- Handling ---------------- */
+
     public static void handle(C2S_CreateCivPacket msg, CustomPayloadEvent.Context ctx) {
-        var sender = ctx.getSender();
-        if (!(sender instanceof net.minecraft.server.level.ServerPlayer player)) {
+        if (!(ctx.getSender() instanceof ServerPlayer player)) {
             ctx.setPacketHandled(true);
             return;
         }
@@ -45,27 +52,28 @@ public final class C2S_CreateCivPacket {
         ctx.enqueueWork(() -> {
             if (!(player.level() instanceof ServerLevel level)) return;
 
-            // Prevent chunk generation exploits
+            // Prevent chunk generation / spoofing
             if (!level.hasChunkAt(msg.monumentPos)) return;
 
-            // Validate block + BE
-            var state = level.getBlockState(msg.monumentPos);
-            if (state.getBlock() != net.reminitous.mineciv.registry.ModBlocks.MONUMENT.get()) return;
+            // Validate block
+            if (level.getBlockState(msg.monumentPos).getBlock() != ModBlocks.MONUMENT.get()) return;
 
+            // Validate block entity
             var be = level.getBlockEntity(msg.monumentPos);
-            if (!(be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity monumentBE)) return;
+            if (!(be instanceof MonumentBlockEntity monumentBE)) return;
 
-            // Monument already bound → reject
+            // Monument already used
             if (monumentBE.isBound()) return;
 
             // Player must not already be in a civ
             if (CivilizationManager.findPlayerCiv(level, player.getUUID()).isPresent()) return;
 
+            // Chunk must be valid for civ creation
             ChunkPos chunk = new ChunkPos(msg.monumentPos);
             if (!CivilizationManager.canCreateCiv(level, player.getUUID(), chunk)) return;
 
-            // ---- CREATE CIV ----
-            var civ = CivilizationManager.createCiv(
+            // ---------------- CREATE CIV ----------------
+            Civilization civ = CivilizationManager.createCiv(
                     level,
                     player.getUUID(),
                     msg.name,
@@ -73,10 +81,19 @@ public final class C2S_CreateCivPacket {
                     msg.monumentPos
             );
 
-            // ---- BIND MONUMENT ----
-            monumentBE.setCivId(civ.id());
+            // ---------------- BIND MONUMENT ----------------
+            monumentBE.bindToCiv(civ.id());
+            monumentBE.setChanged();
+
+            level.sendBlockUpdated(
+                    msg.monumentPos,
+                    level.getBlockState(msg.monumentPos),
+                    level.getBlockState(msg.monumentPos),
+                    3
+            );
         });
 
         ctx.setPacketHandled(true);
     }
 }
+

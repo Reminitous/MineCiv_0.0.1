@@ -76,6 +76,36 @@ public final class MonumentBlock extends BaseEntityBlock {
                 : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
+    @Override
+    public float getDestroyProgress(BlockState state, Player player, net.minecraft.world.level.BlockGetter level, BlockPos pos) {
+        // Creative: instant
+        if (player.isCreative()) return 1.0F;
+
+        // 15 minutes = 900 seconds = 18,000 ticks
+        // Return progress-per-tick so it always takes ~18,000 ticks.
+        return 1.0F / 18000.0F;
+    }
+
+    @Override
+    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        super.onRemove(state, level, pos, newState, movedByPiston);
+
+        // Only act if the block is actually being replaced (not just state change)
+        if (state.getBlock() == newState.getBlock()) return;
+        if (level.isClientSide) return;
+        if (!(level instanceof ServerLevel sLevel)) return;
+
+        BlockEntity be = sLevel.getBlockEntity(pos);
+        if (!(be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity monumentBE)) return;
+        if (!monumentBE.isBound()) return;
+
+        java.util.UUID civId = monumentBE.getCivId();
+        if (civId == null) return;
+
+        // Auto-disband even if it was broken in creative or removed unexpectedly
+        net.reminitous.mineciv.civ.CivilizationManager.disbandCivByMonumentDestroyed(sLevel, civId, pos);
+    }
+
     /* ================= CORE ================= */
 
     private static InteractionResult handleRightClick(Level level, BlockPos pos, Player player) {

@@ -13,7 +13,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.territory.TerritoryManager;
-import net.reminitous.mineciv.monument.MonumentBlockEntity;
+import net.reminitous.mineciv.net.Network;
 
 import java.util.UUID;
 
@@ -38,89 +38,109 @@ public final class C2S_ClaimAdjacentToMonumentPacket {
     }
 
     public static C2S_ClaimAdjacentToMonumentPacket decode(FriendlyByteBuf buf) {
-        return new C2S_ClaimAdjacentToMonumentPacket(
-                buf.readBlockPos(),
-                buf.readUUID(),
-                buf.readEnum(Dir.class)
-        );
+        BlockPos pos = buf.readBlockPos();
+        UUID civId = buf.readUUID();
+        Dir dir = buf.readEnum(Dir.class);
+        return new C2S_ClaimAdjacentToMonumentPacket(pos, civId, dir);
     }
 
     public static void handle(C2S_ClaimAdjacentToMonumentPacket msg, CustomPayloadEvent.Context ctx) {
-        if (!(ctx.getSender() instanceof ServerPlayer player)) {
+        var sender = ctx.getSender();
+        if (!(sender instanceof ServerPlayer player)) {
             ctx.setPacketHandled(true);
             return;
         }
 
         ctx.enqueueWork(() -> {
             if (!(player.level() instanceof ServerLevel level)) return;
-            if (msg.monumentPos == null || msg.civId == null || msg.dir == null) return;
-            if (!level.hasChunkAt(msg.monumentPos)) return;
 
-            if (!(level.getBlockEntity(msg.monumentPos) instanceof MonumentBlockEntity monumentBE)) return;
-            if (!monumentBE.isBound()) return;
-            if (!msg.civId.equals(monumentBE.getCivId())) return;
+            if (msg.monumentPos == null || msg.civId == null || msg.dir == null) {
+                send(player, false, "Invalid claim request.", -1, null);
+                return;
+            }
+
+            if (!level.hasChunkAt(msg.monumentPos)) {
+                send(player, false, "Monument chunk is not loaded.", -1, null);
+                return;
+            }
+
+            var be = level.getBlockEntity(msg.monumentPos);
+            if (!(be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity monumentBE)) {
+                send(player, false, "That is not a valid monument.", -1, null);
+                return;
+            }
+
+            if (!monumentBE.isBound() || monumentBE.getCivId() == null || !monumentBE.getCivId().equals(msg.civId)) {
+                send(player, false, "Monument is not bound to your civilization.", -1, null);
+                return;
+            }
 
             CivSavedData data = CivSavedData.get(level.getServer());
             Civilization civ = data.getCiv(msg.civId);
-            if (civ == null) return;
+            if (civ == null) {
+                send(player, false, "Civilization not found.", -1, null);
+                return;
+            }
 
-            if (!player.getUUID().equals(civ.leader())) {
-                send(player, "Only the civilization leader can claim territory.", 0xFF5555);
+            if (civ.leader() == null || !civ.leader().equals(player.getUUID())) {
+                send(player, false, "Only the leader can claim territory.", civ.claimCredits(), null);
                 return;
             }
 
             if (civ.claimCredits() <= 0) {
-                send(player, "No claim credits available.", 0xFF5555);
+                send(player, false, "No claim credits available.", civ.claimCredits(), null);
                 return;
             }
 
+            // Compute target chunk adjacent to monument chunk
             ChunkPos base = new ChunkPos(msg.monumentPos);
             int dx = 0, dz = 0;
-
             switch (msg.dir) {
                 case NORTH -> dz = -1;
                 case SOUTH -> dz =  1;
                 case WEST  -> dx = -1;
                 case EAST  -> dx =  1;
             }
-
             ChunkPos target = new ChunkPos(base.x + dx, base.z + dz);
 
-            // Overworld authority
+            // Overworld authority for claims
             ServerLevel overworld = player.getServer().getLevel(Level.OVERWORLD);
             if (overworld == null) {
-                send(player, "Overworld unavailable.", 0xFF5555);
+                send(player, false, "Overworld is null.", civ.claimCredits(), null);
                 return;
             }
 
-            TerritoryManager.ClaimResult res =
-                    TerritoryManager.claimChunkDetailed(overworld, civ.id(), target);
-
+            TerritoryManager.ClaimResult res = TerritoryManager.claimChunkDetailed(overworld, civ.id(), target);
             if (res != TerritoryManager.ClaimResult.SUCCESS) {
-                send(player, "Claim failed: " + failureText(res), 0xFF5555);
+                send(player, false,
+                        "Failed to claim " + msg.dir + ": " + failureText(res),
+                        civ.claimCredits(),
+                        target
+                );
                 return;
             }
 
-            // Spend credit only on success
+            // Spend credit only after successful claim
             civ.spendClaimCredit();
             data.putCiv(civ);
 
-            send(player,
-                    "Claimed " + msg.dir +
-                            " (" + target.x + ", " + target.z + "). " +
-                            "Credits left: " + civ.claimCredits(),
-                    0x55FF55
+            send(player, true,
+                    "Claimed " + msg.dir + " (" + target.x + ", " + target.z + "). Credits left: " + civ.claimCredits(),
+                    civ.claimCredits(),
+                    target
             );
         });
 
         ctx.setPacketHandled(true);
     }
 
-    /* ------------------------------------------------------------ */
+    private static void send(ServerPlayer player, boolean success, String message, int credits, ChunkPos chunk) {
+        boolean hasChunk = chunk != null;
+        int x = hasChunk ? chunk.x : 0;
+        int z = hasChunk ? chunk.z : 0;
 
-    private static void send(ServerPlayer player, String text, int color) {
-        net.reminitous.mineciv.net.Network.CH.send(
-                new S2C_ClaimFeedbackPacket(text, color, 80),
+        Network.CH.send(
+                new S2C_ClaimFeedbackPacket(success, message, credits, hasChunk, x, z),
                 PacketDistributor.PLAYER.with(player)
         );
     }
@@ -128,13 +148,12 @@ public final class C2S_ClaimAdjacentToMonumentPacket {
     private static String failureText(TerritoryManager.ClaimResult r) {
         return switch (r) {
             case ALREADY_CLAIMED -> "that chunk is already claimed.";
-            case CIV_NOT_FOUND -> "civilization not found.";
-            case MAX_CHUNKS_REACHED -> "maximum territory size reached.";
-            case NOT_ADJACENT -> "territory must be adjacent.";
-            case TOO_WIDE -> "territory shape would be too wide.";
+            case CIV_NOT_FOUND -> "civ not found.";
+            case MAX_CHUNKS_REACHED -> "max territory size reached (" + TerritoryManager.MAX_CHUNKS + ").";
+            case NOT_ADJACENT -> "must touch your territory edge.";
+            case TOO_WIDE -> "must fit inside a " + TerritoryManager.MAX_SPAN + "x" + TerritoryManager.MAX_SPAN + " chunk box.";
             case TOO_CLOSE_TO_OTHER_TERRITORY ->
-                    "must keep at least " + TerritoryManager.MIN_TERRITORY_GAP +
-                            " chunks from another civilization.";
+                    "must keep at least " + TerritoryManager.MIN_TERRITORY_GAP + " chunks away from other civilizations' territory.";
             default -> "claim failed.";
         };
     }

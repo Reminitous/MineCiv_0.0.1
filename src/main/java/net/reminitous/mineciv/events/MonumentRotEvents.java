@@ -22,7 +22,6 @@ import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.territory.TerritoryManager;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = MineCiv.MOD_ID)
@@ -74,7 +73,7 @@ public final class MonumentRotEvents {
         CivSavedData data = CivSavedData.get(server);
 
         long now = System.currentTimeMillis();
-        List<UUID> toRot = new ArrayList<>();
+        ArrayList<UUID> toRot = new ArrayList<>();
 
         for (Civilization civ : data.civs().values()) {
             long last = civ.lastActiveEpochMs();
@@ -101,14 +100,36 @@ public final class MonumentRotEvents {
 
     /* ---------------- Core rot logic ---------------- */
 
-    private static void unclaimAllForCiv(ServerLevel overworld, UUID civId, net.reminitous.mineciv.civ.Civilization civ) {
+    private static void unclaimAllForCiv(ServerLevel overworld, UUID civId, Civilization civ) {
         if (civ == null || civId == null) return;
 
         // Copy to avoid concurrent modification while removing
         java.util.List<Long> claimed = new java.util.ArrayList<>(civ.claimedChunks());
         for (long chunkLong : claimed) {
             net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(chunkLong);
-            net.reminitous.mineciv.territory.TerritoryManager.unclaimChunk(overworld, civId, cp);
+            TerritoryManager.unclaimChunk(overworld, civId, cp);
+        }
+    }
+
+    private static void deleteCivNpcs(MinecraftServer server, Civilization civ) {
+        if (server == null || civ == null) return;
+
+        java.util.List<java.util.UUID> npcIds = new java.util.ArrayList<>(civ.npcIds());
+        if (npcIds.isEmpty()) return;
+
+        // Try all dimensions because the NPC might be in any loaded level
+        for (ServerLevel dimLevel : server.getAllLevels()) {
+            for (java.util.UUID npcId : npcIds) {
+                var ent = dimLevel.getEntity(npcId);
+                if (ent != null) {
+                    ent.discard(); // delete the entity
+                }
+            }
+        }
+
+        // Clear tracking list on civ object (so it doesn't retain stale UUIDs)
+        for (java.util.UUID npcId : npcIds) {
+            civ.removeNpcId(npcId);
         }
     }
 
@@ -123,13 +144,15 @@ public final class MonumentRotEvents {
             data.setPlayersCiv(member, null);
         }
 
-        // 3) Remove monument if chunk is loaded (best-effort; no force-load)
+        // 3) Delete civ NPCs (rot behavior)
+        deleteCivNpcs(server, civ);
+
+        // 4) Remove monument if chunk is loaded (best-effort; no force-load)
         removeMonumentIfLoaded(server, civ);
 
-        // 4) Remove civ record
+        // 5) Remove civ record
         data.removeCiv(civId);
 
-        // Optional: broadcast
         server.getPlayerList().broadcastSystemMessage(
                 Component.literal("A civilization has rotted from inactivity: " +
                         (civ.name() == null || civ.name().isBlank() ? civId.toString() : civ.name())),
@@ -147,7 +170,6 @@ public final class MonumentRotEvents {
         // Only remove if chunk is loaded (don't force-load)
         if (!level.hasChunkAt(pos)) return;
 
-        // Remove the monument block; structures remain
         level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
     }
 

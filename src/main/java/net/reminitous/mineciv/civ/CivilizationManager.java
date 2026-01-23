@@ -341,4 +341,74 @@ public final class CivilizationManager {
         }
     }
 
+    public static boolean disbandCivByMonumentDestroyed(ServerLevel level, UUID civId, BlockPos monumentPos) {
+        if (civId == null || monumentPos == null) return false;
+
+        var server = level.getServer();
+        CivSavedData data = CivSavedData.get(server);
+
+        Civilization civ = data.getCiv(civId);
+        if (civ == null) return false;
+
+        // Reuse your existing disband logic safely:
+        // If your current disband requires leader UUID, we can use the stored leader (if present).
+        UUID leader = civ.leader();
+
+        // If you *require* a leader in the existing method, prefer calling your internal cleanup directly.
+        // Here is the safe approach: call the same cleanup you already do, but without the “requester must be leader” gate.
+
+        // 1) Broadcast + close UI
+        var msg = net.minecraft.network.chat.Component.literal("🏳 Civilization disbanded (Monument destroyed).");
+        for (UUID memberId : new java.util.ArrayList<>(civ.members())) {
+            var p = server.getPlayerList().getPlayer(memberId);
+            if (p != null) {
+                p.sendSystemMessage(msg);
+                Network.CH.send(new net.reminitous.mineciv.net.pkt.S2C_ForceCloseMineCivUiPacket(),
+                        net.minecraftforge.network.PacketDistributor.PLAYER.with(p));
+            }
+        }
+
+        // 2) Delete NPCs (you said “delete them”)
+        for (var dimLevel : server.getAllLevels()) {
+            for (UUID npcId : new java.util.ArrayList<>(civ.npcIds())) {
+                var ent = dimLevel.getEntity(npcId);
+                if (ent != null) ent.discard();
+            }
+        }
+        for (UUID npcId : new java.util.ArrayList<>(civ.npcIds())) civ.removeNpcId(npcId);
+
+        // 3) Unclaim all chunks (Overworld authority)
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        if (overworld == null) overworld = level;
+
+        for (long chunkLong : new java.util.ArrayList<>(civ.claimedChunks())) {
+            ChunkPos cp = new ChunkPos(chunkLong);
+            TerritoryManager.unclaimChunk(overworld, civId, cp);
+        }
+
+        // 4) Clear player->civ mapping
+        for (UUID memberId : new java.util.ArrayList<>(civ.members())) {
+            data.setPlayersCiv(memberId, null);
+        }
+
+        // 5) Clear pending invites pointing to this civ
+        java.util.List<UUID> toClear = new java.util.ArrayList<>();
+        for (var e : data.pendingInvites().entrySet()) {
+            if (civId.equals(e.getValue())) toClear.add(e.getKey());
+        }
+        for (UUID invited : toClear) data.setPendingInvite(invited, null);
+
+        // 6) Ensure monument gone (best effort)
+        if (overworld.hasChunkAt(monumentPos)) {
+            overworld.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        } else if (level.hasChunkAt(monumentPos)) {
+            level.setBlock(monumentPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        }
+
+        // 7) Delete civ record
+        data.removeCiv(civId);
+
+        return true;
+    }
+
 }
