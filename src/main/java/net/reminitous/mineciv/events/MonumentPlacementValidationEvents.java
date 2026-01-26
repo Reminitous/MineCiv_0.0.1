@@ -22,10 +22,6 @@ public final class MonumentPlacementValidationEvents {
 
     private MonumentPlacementValidationEvents() {}
 
-    // ---- Tuning knobs (in CHUNKS) ----
-    public static final int MIN_CHUNKS_FROM_SPAWN = 25;
-    public static final int MIN_CHUNKS_BETWEEN_MONUMENTS = 25;
-
     @SubscribeEvent
     public static void onPlace(BlockEvent.EntityPlaceEvent e) {
         if (!(e.getLevel() instanceof ServerLevel level)) return;
@@ -62,52 +58,16 @@ public final class MonumentPlacementValidationEvents {
             return;
         }
 
-        // Rule: cannot place within MIN_CHUNKS_FROM_SPAWN chunks of world spawn (distance in chunks)
-        BlockPos spawn = level.getSharedSpawnPos();
-        ChunkPos spawnChunk = new ChunkPos(spawn);
-        int dxSpawn = Math.abs(cp.x - spawnChunk.x);
-        int dzSpawn = Math.abs(cp.z - spawnChunk.z);
-        int chebSpawn = Math.max(dxSpawn, dzSpawn); // chunk-square distance
-
-        if (chebSpawn < MIN_CHUNKS_FROM_SPAWN) {
-            e.setCanceled(true);
-            player.sendSystemMessage(Component.literal(
-                    "Monuments must be at least " + MIN_CHUNKS_FROM_SPAWN + " chunks from spawn."
-            ));
-            return;
-        }
-
-        // Rule: cannot place within MIN_CHUNKS_BETWEEN_MONUMENTS chunks of another civ's monument (distance in chunks)
-        for (var civ : data.civs().values()) {
-            BlockPos mPos = civ.monumentPos();
-            if (mPos == null) continue;
-
-            // Only compare monuments in the overworld (your current design)
-            String dim = civ.monumentDimId();
-            if (dim == null) continue;
-            if (!dim.equals(Level.OVERWORLD.location().toString())) continue;
-
-            ChunkPos other = new ChunkPos(mPos);
-
-            int dx = Math.abs(cp.x - other.x);
-            int dz = Math.abs(cp.z - other.z);
-            int cheb = Math.max(dx, dz);
-
-            if (cheb < MIN_CHUNKS_BETWEEN_MONUMENTS) {
-                e.setCanceled(true);
-                player.sendSystemMessage(Component.literal(
-                        "Monuments must be at least " + MIN_CHUNKS_BETWEEN_MONUMENTS + " chunks from other monuments."
-                ));
-                return;
-            }
-        }
-
-        // Rule: only one Monument per chunk (block entity scan)
+        // Rule: only one Monument per chunk
+        // IMPORTANT: ignore the monument BE at the position we're currently placing
         var chunk = level.getChunkAt(pos);
-        boolean alreadyHasMonument = chunk.getBlockEntitiesPos().stream()
-                .anyMatch(bePos -> chunk.getBlockEntity(bePos) instanceof net.reminitous.mineciv.monument.MonumentBlockEntity);
+        boolean alreadyHasOtherMonument = chunk.getBlockEntities().entrySet().stream()
+                .anyMatch(entry ->
+                        !entry.getKey().equals(pos) &&
+                                entry.getValue() instanceof net.reminitous.mineciv.monument.MonumentBlockEntity
+                );
 
-        if (alreadyHasMonument) {
+        if (alreadyHasOtherMonument) {
             e.setCanceled(true);
             player.sendSystemMessage(Component.literal("There is already a Monument in this chunk."));
         }
