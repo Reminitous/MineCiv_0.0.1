@@ -6,7 +6,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
@@ -79,10 +78,9 @@ public class MineCivNpcBase extends Villager {
     public SpawnGroupData finalizeSpawn(ServerLevelAccessor level,
                                         DifficultyInstance difficulty,
                                         MobSpawnType reason,
-                                        @Nullable SpawnGroupData spawnData,
-                                        @Nullable CompoundTag tag) {
+                                        @Nullable SpawnGroupData spawnData) {
 
-        SpawnGroupData out = super.finalizeSpawn(level, difficulty, reason, spawnData, tag);
+        SpawnGroupData out = super.finalizeSpawn(level, difficulty, reason, spawnData);
 
         // Only do server-side setup (avoid client desync / double equips)
         if (this.level() instanceof ServerLevel) {
@@ -94,7 +92,7 @@ public class MineCivNpcBase extends Villager {
 
     /**
      * Subclasses override this to equip their default items (bow, sword, hoe, etc).
-     * Called exactly once after spawn.
+     * Called once after spawn.
      */
     protected void equipRoleKit() {
         // default: nothing
@@ -103,7 +101,6 @@ public class MineCivNpcBase extends Villager {
     protected final void ensureMainHand(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return;
         this.setItemSlot(EquipmentSlot.MAINHAND, stack);
-        // Don’t drop free gear
         this.setDropChance(EquipmentSlot.MAINHAND, 0.0f);
     }
 

@@ -33,7 +33,8 @@ public final class MineCivKnightNpc extends MineCivNpcBase {
     }
 
     @Override
-    protected void equipDefaultKit() {
-        ensureMainhand(new ItemStack(Items.IRON_SWORD));
+    protected void equipRoleKit() {
+        ensureMainHand(new ItemStack(Items.IRON_SWORD));
+        ensureOffHand(new ItemStack(Items.SHIELD));
     }
 }

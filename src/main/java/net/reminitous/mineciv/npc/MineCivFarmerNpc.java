@@ -32,7 +32,7 @@ public final class MineCivFarmerNpc extends MineCivNpcBase {
     }
 
     @Override
-    protected void equipDefaultKit() {
-        ensureMainhand(new ItemStack(Items.IRON_HOE));
+    protected void equipRoleKit() {
+        ensureMainHand(new ItemStack(Items.IRON_HOE));
     }
 }
