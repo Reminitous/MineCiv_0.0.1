@@ -1,94 +1,151 @@
 package net.reminitous.mineciv.npc;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.UUID;
 
-public abstract class MineCivNpcBase extends PathfinderMob {
+public class MineCivNpcBase extends Villager {
 
-    private static final EntityDataAccessor<java.util.Optional<UUID>> DATA_CIV_ID =
-            SynchedEntityData.defineId(MineCivNpcBase.class, EntityDataSerializers.OPTIONAL_UUID);
+    // Synced role string (ex: "archer", "knight", "farmer")
+    private static final EntityDataAccessor<String> DATA_ROLE =
+            SynchedEntityData.defineId(MineCivNpcBase.class, EntityDataSerializers.STRING);
 
-    protected MineCivNpcBase(EntityType<? extends PathfinderMob> type, Level level) {
+    // Civ id + home monument stored in NBT
+    private UUID civId;
+    private BlockPos homeMonument;
+
+    public MineCivNpcBase(EntityType<? extends Villager> type, Level level) {
         super(type, level);
-        this.setCanPickUpLoot(false);
     }
+
+    /* ---------------- Synced data (1.21.x) ---------------- */
 
     @Override
-    protected void defineSynchedData() {
-        super.defineSynchedData();
-        this.entityData.define(DATA_CIV_ID, java.util.Optional.empty());
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        super.defineSynchedData(builder);
+        builder.define(DATA_ROLE, "");
     }
 
-    public @Nullable UUID getCivId() {
-        return this.entityData.get(DATA_CIV_ID).orElse(null);
+    public String getRole() {
+        return this.entityData.get(DATA_ROLE);
     }
 
-    public void setCivId(@Nullable UUID civId) {
-        this.entityData.set(DATA_CIV_ID, java.util.Optional.ofNullable(civId));
-        this.setPersistenceRequired(); // keep civ NPCs from natural despawn
+    public void setRole(String role) {
+        this.entityData.set(DATA_ROLE, role == null ? "" : role);
     }
 
-    /** Each role equips its “default kit” here. */
-    protected abstract void equipDefaultKit();
+    public UUID getCivId() {
+        return civId;
+    }
 
-    /** Enforce kit if player stripped it, etc. */
-    protected final void ensureMainhand(ItemStack desired) {
-        ItemStack cur = this.getItemBySlot(EquipmentSlot.MAINHAND);
-        if (cur.isEmpty()) {
-            this.setItemSlot(EquipmentSlot.MAINHAND, desired.copy());
+    public void setCivId(UUID civId) {
+        this.civId = civId;
+    }
+
+    public BlockPos getHomeMonument() {
+        return homeMonument;
+    }
+
+    public void setHomeMonument(BlockPos homeMonument) {
+        this.homeMonument = homeMonument;
+    }
+
+    /** Convenience bind method */
+    public void bindToCiv(UUID civId, @Nullable BlockPos monumentPos) {
+        this.civId = civId;
+        this.homeMonument = monumentPos;
+    }
+
+    /* ---------------- Spawn hook: equip + init ---------------- */
+
+    @Override
+    public SpawnGroupData finalizeSpawn(ServerLevelAccessor level,
+                                        DifficultyInstance difficulty,
+                                        MobSpawnType reason,
+                                        @Nullable SpawnGroupData spawnData,
+                                        @Nullable CompoundTag tag) {
+
+        SpawnGroupData out = super.finalizeSpawn(level, difficulty, reason, spawnData, tag);
+
+        // Only do server-side setup (avoid client desync / double equips)
+        if (this.level() instanceof ServerLevel) {
+            equipRoleKit();
         }
-    }
 
-    @Override
-    public void aiStep() {
-        super.aiStep();
-
-        // Every ~5 seconds on server: ensure role kit still present
-        if (!this.level().isClientSide && this.tickCount % 100 == 0) {
-            this.equipDefaultKit();
-        }
-    }
-
-    @Override
-    public @Nullable net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
-            ServerLevelAccessor level,
-            DifficultyInstance difficulty,
-            MobSpawnType reason,
-            @Nullable net.minecraft.world.entity.SpawnGroupData spawnData,
-            @Nullable CompoundTag dataTag
-    ) {
-        net.minecraft.world.entity.SpawnGroupData out = super.finalizeSpawn(level, difficulty, reason, spawnData, dataTag);
-        this.equipDefaultKit();
         return out;
     }
+
+    /**
+     * Subclasses override this to equip their default items (bow, sword, hoe, etc).
+     * Called exactly once after spawn.
+     */
+    protected void equipRoleKit() {
+        // default: nothing
+    }
+
+    protected final void ensureMainHand(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return;
+        this.setItemSlot(EquipmentSlot.MAINHAND, stack);
+        // Don’t drop free gear
+        this.setDropChance(EquipmentSlot.MAINHAND, 0.0f);
+    }
+
+    protected final void ensureOffHand(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return;
+        this.setItemSlot(EquipmentSlot.OFFHAND, stack);
+        this.setDropChance(EquipmentSlot.OFFHAND, 0.0f);
+    }
+
+    /* ---------------- NBT ---------------- */
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
 
-        UUID civ = getCivId();
-        if (civ != null) tag.putUUID("MineCivCivId", civ);
+        String role = getRole();
+        if (!role.isEmpty()) tag.putString("MineCivRole", role);
+
+        if (civId != null) tag.putUUID("MineCivCivId", civId);
+
+        if (homeMonument != null) {
+            tag.putInt("MineCivMonX", homeMonument.getX());
+            tag.putInt("MineCivMonY", homeMonument.getY());
+            tag.putInt("MineCivMonZ", homeMonument.getZ());
+        }
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
 
-        if (tag.hasUUID("MineCivCivId")) {
-            setCivId(tag.getUUID("MineCivCivId"));
+        if (tag.contains("MineCivRole")) setRole(tag.getString("MineCivRole"));
+        civId = tag.hasUUID("MineCivCivId") ? tag.getUUID("MineCivCivId") : null;
+
+        if (tag.contains("MineCivMonX") && tag.contains("MineCivMonY") && tag.contains("MineCivMonZ")) {
+            homeMonument = new BlockPos(
+                    tag.getInt("MineCivMonX"),
+                    tag.getInt("MineCivMonY"),
+                    tag.getInt("MineCivMonZ")
+            );
+        } else {
+            homeMonument = null;
         }
     }
 }

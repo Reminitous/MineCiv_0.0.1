@@ -4,8 +4,9 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
-import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -13,8 +14,9 @@ import net.minecraft.world.level.Level;
 
 public final class MineCivArcherNpc extends MineCivNpcBase {
 
-    public MineCivArcherNpc(EntityType<? extends MineCivNpcBase> type, Level level) {
+    public MineCivArcherNpc(EntityType<? extends Villager> type, Level level) {
         super(type, level);
+        this.setRole("archer");
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -32,8 +34,8 @@ public final class MineCivArcherNpc extends MineCivNpcBase {
     }
 
     @Override
-    protected void equipDefaultKit() {
-        ensureMainhand(new ItemStack(Items.BOW));
-        // We’ll do “needs arrows” later when we wire combat/ranged AI.
+    protected void equipRoleKit() {
+        ensureMainHand(new ItemStack(Items.BOW));
+        // arrows / ranged AI comes later; for now this is just visual kit
     }
 }
