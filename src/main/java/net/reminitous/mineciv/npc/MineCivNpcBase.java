@@ -5,109 +5,84 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.DifficultyInstance;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.entity.ai.goal.FloatGoal;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.ServerLevelAccessor;
-
-import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
 
-public class MineCivNpcBase extends Villager {
+public abstract class MineCivNpcBase extends Villager {
 
-    // Synced role string (ex: "archer", "knight", "farmer")
+    /* ---------------- Synced data ---------------- */
+
     private static final EntityDataAccessor<String> DATA_ROLE =
             SynchedEntityData.defineId(MineCivNpcBase.class, EntityDataSerializers.STRING);
 
-    // Civ id + home monument stored in NBT
-    private UUID civId;
-    private BlockPos homeMonument;
+    /* ---------------- Persistent data ---------------- */
 
-    public MineCivNpcBase(EntityType<? extends Villager> type, Level level) {
+    protected UUID civId;
+    protected BlockPos homeMonument;
+
+    protected MineCivNpcBase(EntityType<? extends Villager> type, Level level) {
         super(type, level);
     }
 
-    /* ---------------- Synced data (1.21.x) ---------------- */
+    /* ---------------- Synced data ---------------- */
 
     @Override
-    protected void defineSynchedData(SynchedEntityData.Builder builder) {
-        super.defineSynchedData(builder);
-        builder.define(DATA_ROLE, "");
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.entityData.define(DATA_ROLE, "");
     }
 
     public String getRole() {
         return this.entityData.get(DATA_ROLE);
     }
 
-    public void setRole(String role) {
+    protected void setRole(String role) {
         this.entityData.set(DATA_ROLE, role == null ? "" : role);
     }
+
+    /* ---------------- Civ binding ---------------- */
 
     public UUID getCivId() {
         return civId;
     }
 
-    public void setCivId(UUID civId) {
-        this.civId = civId;
-    }
-
-    public BlockPos getHomeMonument() {
-        return homeMonument;
-    }
-
-    public void setHomeMonument(BlockPos homeMonument) {
-        this.homeMonument = homeMonument;
-    }
-
-    /** Convenience bind method */
-    public void bindToCiv(UUID civId, @Nullable BlockPos monumentPos) {
+    public void bindToCiv(UUID civId, BlockPos monumentPos) {
         this.civId = civId;
         this.homeMonument = monumentPos;
     }
 
-    /* ---------------- Spawn hook: equip + init ---------------- */
+    /* ---------------- AI ---------------- */
 
     @Override
-    public SpawnGroupData finalizeSpawn(ServerLevelAccessor level,
-                                        DifficultyInstance difficulty,
-                                        MobSpawnType reason,
-                                        @Nullable SpawnGroupData spawnData) {
+    protected void registerGoals() {
+        this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(6, new RandomStrollGoal(this, 0.6D));
+        this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 8.0F));
+    }
 
-        SpawnGroupData out = super.finalizeSpawn(level, difficulty, reason, spawnData);
+    /* ---------------- Friendly-fire protection ---------------- */
 
-        // Only do server-side setup (avoid client desync / double equips)
-        if (this.level() instanceof ServerLevel) {
-            equipRoleKit();
+    @Override
+    public boolean isAlliedTo(net.minecraft.world.entity.Entity other) {
+        if (other instanceof Player p) {
+            // Players in same civ are allies (we’ll enforce later)
+            return true;
         }
-
-        return out;
+        return super.isAlliedTo(other);
     }
 
-    /**
-     * Subclasses override this to equip their default items (bow, sword, hoe, etc).
-     * Called once after spawn.
-     */
-    protected void equipRoleKit() {
-        // default: nothing
-    }
+    /* ---------------- Persistence ---------------- */
 
-    protected final void ensureMainHand(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return;
-        this.setItemSlot(EquipmentSlot.MAINHAND, stack);
-        this.setDropChance(EquipmentSlot.MAINHAND, 0.0f);
-    }
-
-    protected final void ensureOffHand(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return;
-        this.setItemSlot(EquipmentSlot.OFFHAND, stack);
-        this.setDropChance(EquipmentSlot.OFFHAND, 0.0f);
+    @Override
+    public boolean removeWhenFarAway(double distanceToClosestPlayer) {
+        return false; // Civ NPCs never despawn naturally
     }
 
     /* ---------------- NBT ---------------- */
@@ -116,15 +91,15 @@ public class MineCivNpcBase extends Villager {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
 
-        String role = getRole();
-        if (!role.isEmpty()) tag.putString("MineCivRole", role);
-
         if (civId != null) tag.putUUID("MineCivCivId", civId);
-
         if (homeMonument != null) {
             tag.putInt("MineCivMonX", homeMonument.getX());
             tag.putInt("MineCivMonY", homeMonument.getY());
             tag.putInt("MineCivMonZ", homeMonument.getZ());
+        }
+
+        if (!getRole().isEmpty()) {
+            tag.putString("MineCivRole", getRole());
         }
     }
 
@@ -132,17 +107,18 @@ public class MineCivNpcBase extends Villager {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
 
-        if (tag.contains("MineCivRole")) setRole(tag.getString("MineCivRole"));
         civId = tag.hasUUID("MineCivCivId") ? tag.getUUID("MineCivCivId") : null;
 
-        if (tag.contains("MineCivMonX") && tag.contains("MineCivMonY") && tag.contains("MineCivMonZ")) {
+        if (tag.contains("MineCivMonX")) {
             homeMonument = new BlockPos(
                     tag.getInt("MineCivMonX"),
                     tag.getInt("MineCivMonY"),
                     tag.getInt("MineCivMonZ")
             );
-        } else {
-            homeMonument = null;
+        }
+
+        if (tag.contains("MineCivRole")) {
+            setRole(tag.getString("MineCivRole"));
         }
     }
 }

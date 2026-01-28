@@ -1,41 +1,43 @@
 package net.reminitous.mineciv.npc;
 
+import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.ai.goal.FloatGoal;
-import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
-import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ServerLevelAccessor;
+
+import javax.annotation.Nullable;
 
 public final class MineCivArcherNpc extends MineCivNpcBase {
 
-    public MineCivArcherNpc(EntityType<? extends Villager> type, Level level) {
+    public MineCivArcherNpc(EntityType<? extends MineCivArcherNpc> type, Level level) {
         super(type, level);
-        this.setRole("archer");
+        setRole("archer");
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        return net.minecraft.world.entity.Mob.createMobAttributes()
+        return createLivingAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.25D)
-                .add(Attributes.FOLLOW_RANGE, 24.0D);
+                .add(Attributes.MOVEMENT_SPEED, 0.5D)
+                .add(Attributes.FOLLOW_RANGE, 40.0D);
     }
 
     @Override
-    protected void registerGoals() {
-        this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.goalSelector.addGoal(4, new RandomStrollGoal(this, 0.9D));
-        this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 8.0F));
-    }
+    @Nullable
+    public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
+            ServerLevelAccessor level,
+            DifficultyInstance difficulty,
+            MobSpawnType reason,
+            @Nullable net.minecraft.world.entity.SpawnGroupData spawnData) {
+        var data = super.finalizeSpawn(level, difficulty, reason, spawnData);
 
-    @Override
-    protected void equipRoleKit() {
-        ensureMainHand(new ItemStack(Items.BOW));
-        // arrows / ranged AI comes later; for now this is just visual kit
+        this.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.BOW));
+        this.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND, new ItemStack(Items.ARROW));
+
+        return data;
     }
 }
