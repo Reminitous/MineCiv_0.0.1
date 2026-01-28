@@ -9,7 +9,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraftforge.event.network.CustomPayloadEvent;
 import net.minecraftforge.network.PacketDistributor;
 
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.civ.CivilizationManager;
@@ -26,10 +26,10 @@ import java.util.UUID;
 public final class C2S_CreateCivPacket {
 
     private final String name;
-    private final CivClassType classType;
+    private final CivClass classType;
     private final BlockPos monumentPos;
 
-    public C2S_CreateCivPacket(String name, CivClassType classType, BlockPos monumentPos) {
+    public C2S_CreateCivPacket(String name, CivClass classType, BlockPos monumentPos) {
         this.name = name;
         this.classType = classType;
         this.monumentPos = monumentPos;
@@ -37,13 +37,13 @@ public final class C2S_CreateCivPacket {
 
     public static void encode(C2S_CreateCivPacket msg, FriendlyByteBuf buf) {
         buf.writeUtf(msg.name == null ? "" : msg.name, 32);
-        buf.writeEnum(msg.classType == null ? CivClassType.AGRICULTURAL : msg.classType);
+        buf.writeEnum(msg.classType == null ? CivClass.AGRICULTURAL : msg.classType);
         buf.writeBlockPos(msg.monumentPos);
     }
 
     public static C2S_CreateCivPacket decode(FriendlyByteBuf buf) {
         String name = buf.readUtf(32);
-        CivClassType type = buf.readEnum(CivClassType.class);
+        CivClass type = buf.readEnum(CivClass.class);
         BlockPos pos = buf.readBlockPos();
         return new C2S_CreateCivPacket(name, type, pos);
     }
@@ -83,7 +83,7 @@ public final class C2S_CreateCivPacket {
             String civName = (msg.name == null) ? "" : msg.name.trim();
             if (civName.isEmpty()) civName = "Civilization";
 
-            CivClassType type = (msg.classType == null) ? CivClassType.AGRICULTURAL : msg.classType;
+            CivClass type = (msg.classType == null) ? CivClass.AGRICULTURAL : msg.classType;
 
             // ---- CREATE CIV (ONCE) ----
             Civilization civ = CivilizationManager.createCiv(
@@ -136,7 +136,7 @@ public final class C2S_CreateCivPacket {
                             msg.monumentPos,
                             civ.id(),
                             civ.name() == null ? "" : civ.name(),
-                            civ.classType() == null ? CivClassType.AGRICULTURAL : civ.classType(),
+                            civ.classType() == null ? CivClass.AGRICULTURAL : civ.classType(),
                             civ.civLevel(),
                             civ.civXp(),
                             civ.members().size(),

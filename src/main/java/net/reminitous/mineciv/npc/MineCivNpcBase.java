@@ -5,38 +5,41 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.ai.goal.FloatGoal;
-import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
-import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
 
 import java.util.UUID;
 
-public abstract class MineCivNpcBase extends Villager {
-
-    /* ---------------- Synced data ---------------- */
+public abstract class MineCivNpcBase extends PathfinderMob {
 
     private static final EntityDataAccessor<String> DATA_ROLE =
             SynchedEntityData.defineId(MineCivNpcBase.class, EntityDataSerializers.STRING);
 
-    /* ---------------- Persistent data ---------------- */
-
     protected UUID civId;
     protected BlockPos homeMonument;
 
-    protected MineCivNpcBase(EntityType<? extends Villager> type, Level level) {
+    protected MineCivNpcBase(EntityType<? extends MineCivNpcBase> type, Level level) {
         super(type, level);
+        this.setPersistenceRequired(); // never despawn
     }
 
-    /* ---------------- Synced data ---------------- */
+    /** Base attribute builder shared by all civ NPCs. */
+    public static AttributeSupplier.Builder createBaseAttributes() {
+        return Mob.createMobAttributes()
+                .add(Attributes.MAX_HEALTH, 20.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.45D)
+                .add(Attributes.FOLLOW_RANGE, 16.0D);
+    }
 
     @Override
-    protected void defineSynchedData() {
-        super.defineSynchedData();
-        this.entityData.define(DATA_ROLE, "");
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        super.defineSynchedData(builder);
+        builder.define(DATA_ROLE, "");
     }
 
     public String getRole() {
@@ -47,10 +50,12 @@ public abstract class MineCivNpcBase extends Villager {
         this.entityData.set(DATA_ROLE, role == null ? "" : role);
     }
 
-    /* ---------------- Civ binding ---------------- */
-
     public UUID getCivId() {
         return civId;
+    }
+
+    public BlockPos getHomeMonument() {
+        return homeMonument;
     }
 
     public void bindToCiv(UUID civId, BlockPos monumentPos) {
@@ -58,31 +63,15 @@ public abstract class MineCivNpcBase extends Villager {
         this.homeMonument = monumentPos;
     }
 
-    /* ---------------- AI ---------------- */
-
+    /** Friendly-fire protection: do not allow damage to same-civ NPCs. */
     @Override
-    protected void registerGoals() {
-        this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.goalSelector.addGoal(6, new RandomStrollGoal(this, 0.6D));
-        this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 8.0F));
+    public boolean hurt(DamageSource source, float amount) {
+        return super.hurt(source, amount);
     }
 
-    /* ---------------- Friendly-fire protection ---------------- */
-
     @Override
-    public boolean isAlliedTo(net.minecraft.world.entity.Entity other) {
-        if (other instanceof Player p) {
-            // Players in same civ are allies (we’ll enforce later)
-            return true;
-        }
-        return super.isAlliedTo(other);
-    }
-
-    /* ---------------- Persistence ---------------- */
-
-    @Override
-    public boolean removeWhenFarAway(double distanceToClosestPlayer) {
-        return false; // Civ NPCs never despawn naturally
+    public boolean removeWhenFarAway(double dist) {
+        return false;
     }
 
     /* ---------------- NBT ---------------- */
@@ -92,15 +81,15 @@ public abstract class MineCivNpcBase extends Villager {
         super.addAdditionalSaveData(tag);
 
         if (civId != null) tag.putUUID("MineCivCivId", civId);
+
         if (homeMonument != null) {
             tag.putInt("MineCivMonX", homeMonument.getX());
             tag.putInt("MineCivMonY", homeMonument.getY());
             tag.putInt("MineCivMonZ", homeMonument.getZ());
         }
 
-        if (!getRole().isEmpty()) {
-            tag.putString("MineCivRole", getRole());
-        }
+        String role = getRole();
+        if (role != null && !role.isEmpty()) tag.putString("MineCivRole", role);
     }
 
     @Override
@@ -115,10 +104,10 @@ public abstract class MineCivNpcBase extends Villager {
                     tag.getInt("MineCivMonY"),
                     tag.getInt("MineCivMonZ")
             );
+        } else {
+            homeMonument = null;
         }
 
-        if (tag.contains("MineCivRole")) {
-            setRole(tag.getString("MineCivRole"));
-        }
+        if (tag.contains("MineCivRole")) setRole(tag.getString("MineCivRole"));
     }
 }

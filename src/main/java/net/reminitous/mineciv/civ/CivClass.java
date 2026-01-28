@@ -1,6 +1,6 @@
 package net.reminitous.mineciv.civ;
 
-public enum CivClassType {
+public enum CivClass {
     AGRICULTURAL,
     WARLIKE,
     TECHNOLOGY,

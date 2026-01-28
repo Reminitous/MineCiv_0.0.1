@@ -23,7 +23,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import net.reminitous.mineciv.MineCiv;
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.civ.CivilizationManager;
 
@@ -40,7 +40,7 @@ public final class ClassBonusEvents {
         return CivilizationManager.findPlayerCiv(level, player.getUUID());
     }
 
-    private static CivClassType classOf(ServerLevel level, ServerPlayer player) {
+    private static CivClass classOf(ServerLevel level, ServerPlayer player) {
         return civOf(level, player).map(Civilization::classType).orElse(null);
     }
 
@@ -78,7 +78,7 @@ public final class ClassBonusEvents {
         if (!(e.getLevel() instanceof ServerLevel level)) return;
         if (!(e.getPlayer() instanceof ServerPlayer player)) return;
 
-        if (classOf(level, player) != CivClassType.AGRICULTURAL) return;
+        if (classOf(level, player) != CivClass.AGRICULTURAL) return;
 
         BlockState state = e.getState();
         if (!(state.getBlock() instanceof CropBlock crop)) return;
@@ -109,20 +109,20 @@ public final class ClassBonusEvents {
         if (!(e.getEntity() instanceof ServerPlayer player)) return;
         if (!(player.level() instanceof ServerLevel level)) return;
 
-        CivClassType type = classOf(level, player);
+        CivClass type = classOf(level, player);
         if (type == null) return;
 
         BlockState state = e.getState();
 
         // Agricultural: logs +15%
-        if (type == CivClassType.AGRICULTURAL) {
+        if (type == CivClass.AGRICULTURAL) {
             if (state.is(BlockTags.LOGS)) {
                 e.setNewSpeed(e.getNewSpeed() * 1.15f);
             }
         }
 
         // Technology: mining +15% (broad pickaxe stuff, tweak later)
-        if (type == CivClassType.TECHNOLOGY) {
+        if (type == CivClass.TECHNOLOGY) {
             if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) {
                 e.setNewSpeed(e.getNewSpeed() * 1.15f);
             }
@@ -145,7 +145,7 @@ public final class ClassBonusEvents {
         );
         if (!(nearest instanceof ServerPlayer player)) return;
 
-        if (classOf(level, player) != CivClassType.AGRICULTURAL) return;
+        if (classOf(level, player) != CivClass.AGRICULTURAL) return;
 
         // Reduce cooldown (parents typically have positive age after breeding)
         if (e.getParentA() instanceof Animal a) {
@@ -168,9 +168,9 @@ public final class ClassBonusEvents {
         BlockState placed = e.getPlacedBlock();
         if (!isRedstoneComponent(placed)) return;
 
-        CivClassType type = classOf(level, player);
+        CivClass type = classOf(level, player);
 
-        if (type != CivClassType.TECHNOLOGY) {
+        if (type != CivClass.TECHNOLOGY) {
             e.setCanceled(true);
             player.sendSystemMessage(Component.literal("Only Technology civilizations can use redstone."));
         }
@@ -186,8 +186,8 @@ public final class ClassBonusEvents {
         BlockEntity be = level.getBlockEntity(e.getPos());
         if (!(be instanceof net.minecraft.world.level.block.entity.BrewingStandBlockEntity)) return;
 
-        CivClassType type = classOf(level, player);
-        if (type != CivClassType.MYSTIC) {
+        CivClass type = classOf(level, player);
+        if (type != CivClass.MYSTIC) {
             e.setCanceled(true);
             player.sendSystemMessage(Component.literal("Only Mystic civilizations can brew potions."));
         }
@@ -211,8 +211,8 @@ public final class ClassBonusEvents {
         );
         if (!(nearest instanceof ServerPlayer player)) return;
 
-        CivClassType type = classOf(level, player);
-        if (type != CivClassType.MYSTIC) return;
+        CivClass type = classOf(level, player);
+        if (type != CivClass.MYSTIC) return;
 
         int old = e.getEnchantLevel();
         int reduced = Math.max(1, (int) Math.floor(old * 0.8));
@@ -227,7 +227,7 @@ public final class ClassBonusEvents {
         if (!(src instanceof ServerPlayer attacker)) return;
         if (!(attacker.level() instanceof ServerLevel level)) return;
 
-        if (classOf(level, attacker) != CivClassType.WARLIKE) return;
+        if (classOf(level, attacker) != CivClass.WARLIKE) return;
 
         if (e.getEntity() instanceof Monster) {
             e.setAmount(e.getAmount() * 1.15f);

@@ -40,7 +40,7 @@ public final class CivilizationManager {
     public static Civilization createCiv(ServerLevel level,
                                          UUID leaderId,
                                          String name,
-                                         CivClassType classType,
+                                         CivClass classType,
                                          BlockPos monumentPos) {
 
         CivSavedData data = CivSavedData.get(level.getServer());

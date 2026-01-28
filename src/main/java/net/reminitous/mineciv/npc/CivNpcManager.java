@@ -12,7 +12,7 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.npc.VillagerType;
 import net.minecraft.world.level.levelgen.Heightmap;
 
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 
@@ -65,14 +65,14 @@ public final class CivNpcManager {
     }
 
     private static boolean spawnOneNpc(ServerLevel level, Civilization civ, BlockPos monumentPos) {
-        CivClassType ct = civ.classType();
-        if (ct == null) ct = CivClassType.AGRICULTURAL;
+        CivClass ct = civ.classType();
+        if (ct == null) ct = CivClass.AGRICULTURAL;
 
         VillagerProfession prof = chooseProfession(level.random.nextInt(100), ct);
         String roleName = roleNameForProfession(prof, ct);
 
         // WARLIKE Guards are real fighters: spawn an Iron Golem
-        boolean spawnGolemGuard = (ct == CivClassType.WARLIKE && "Guard".equals(roleName));
+        boolean spawnGolemGuard = (ct == CivClass.WARLIKE && "Guard".equals(roleName));
 
         for (int i = 0; i < 12; i++) {
             int dx = level.random.nextInt(9) - 4;
@@ -127,7 +127,7 @@ public final class CivNpcManager {
         return false;
     }
 
-    private static VillagerProfession chooseProfession(int roll, CivClassType type) {
+    private static VillagerProfession chooseProfession(int roll, CivClass type) {
         return switch (type) {
             case AGRICULTURAL -> {
                 if (roll < 60) yield VillagerProfession.FARMER;
@@ -155,21 +155,21 @@ public final class CivNpcManager {
         };
     }
 
-    private static String roleNameForProfession(VillagerProfession prof, CivClassType type) {
-        if (type == CivClassType.WARLIKE && prof == VillagerProfession.FLETCHER) return "Archer";
-        if (type == CivClassType.WARLIKE && (prof == VillagerProfession.WEAPONSMITH || prof == VillagerProfession.ARMORER)) return "Guard";
+    private static String roleNameForProfession(VillagerProfession prof, CivClass type) {
+        if (type == CivClass.WARLIKE && prof == VillagerProfession.FLETCHER) return "Archer";
+        if (type == CivClass.WARLIKE && (prof == VillagerProfession.WEAPONSMITH || prof == VillagerProfession.ARMORER)) return "Guard";
 
-        if (type == CivClassType.AGRICULTURAL && prof == VillagerProfession.FARMER) return "Farmer";
-        if (type == CivClassType.AGRICULTURAL && prof == VillagerProfession.SHEPHERD) return "Shepherd";
-        if (type == CivClassType.AGRICULTURAL && prof == VillagerProfession.FLETCHER) return "Lumberjack";
+        if (type == CivClass.AGRICULTURAL && prof == VillagerProfession.FARMER) return "Farmer";
+        if (type == CivClass.AGRICULTURAL && prof == VillagerProfession.SHEPHERD) return "Shepherd";
+        if (type == CivClass.AGRICULTURAL && prof == VillagerProfession.FLETCHER) return "Lumberjack";
 
-        if (type == CivClassType.TECHNOLOGY && prof == VillagerProfession.TOOLSMITH) return "Engineer";
-        if (type == CivClassType.TECHNOLOGY && prof == VillagerProfession.MASON) return "Factory Worker";
+        if (type == CivClass.TECHNOLOGY && prof == VillagerProfession.TOOLSMITH) return "Engineer";
+        if (type == CivClass.TECHNOLOGY && prof == VillagerProfession.MASON) return "Factory Worker";
 
-        if (type == CivClassType.MYSTIC && prof == VillagerProfession.CLERIC) return "Witch";
-        if (type == CivClassType.MYSTIC && prof == VillagerProfession.LIBRARIAN) return "Enchanter";
+        if (type == CivClass.MYSTIC && prof == VillagerProfession.CLERIC) return "Witch";
+        if (type == CivClass.MYSTIC && prof == VillagerProfession.LIBRARIAN) return "Enchanter";
 
-        if (type == CivClassType.MERCHANT) return "Merchant";
+        if (type == CivClass.MERCHANT) return "Merchant";
         return "Villager";
     }
 }

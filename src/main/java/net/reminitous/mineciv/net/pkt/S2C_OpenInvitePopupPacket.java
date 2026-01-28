@@ -5,7 +5,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.event.network.CustomPayloadEvent;
 
 import net.reminitous.mineciv.client.screen.InvitePopupScreen;
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 
 import java.util.UUID;
 
@@ -13,9 +13,9 @@ public final class S2C_OpenInvitePopupPacket {
 
     public final UUID civId;
     public final String civName;
-    public final CivClassType classType;
+    public final CivClass classType;
 
-    public S2C_OpenInvitePopupPacket(UUID civId, String civName, CivClassType classType) {
+    public S2C_OpenInvitePopupPacket(UUID civId, String civName, CivClass classType) {
         this.civId = civId;
         this.civName = civName;
         this.classType = classType;
@@ -30,7 +30,7 @@ public final class S2C_OpenInvitePopupPacket {
     public static S2C_OpenInvitePopupPacket decode(FriendlyByteBuf buf) {
         UUID civId = buf.readUUID();
         String name = buf.readUtf(32);
-        CivClassType type = buf.readEnum(CivClassType.class);
+        CivClass type = buf.readEnum(CivClass.class);
         return new S2C_OpenInvitePopupPacket(civId, name, type);
     }
 

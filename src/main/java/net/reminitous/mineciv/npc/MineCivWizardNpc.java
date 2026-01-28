@@ -1,42 +1,29 @@
 package net.reminitous.mineciv.npc;
 
-import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.ServerLevelAccessor;
 
-import javax.annotation.Nullable;
+import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
-public final class MineCivWizardNpc extends MineCivNpcBase {
+public class MineCivWizardNpc extends MineCivNpcBase {
 
     public MineCivWizardNpc(EntityType<? extends MineCivWizardNpc> type, Level level) {
         super(type, level);
-        setRole("knight");
+        setRole("WIZARD");
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        return createLivingAttributes()
-                .add(Attributes.MAX_HEALTH, 30.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.8D)
-                .add(Attributes.FOLLOW_RANGE, 32.0D);
+        return MineCivNpcBase.createBaseAttributes()
+                .add(Attributes.MAX_HEALTH, 26.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.50D)
+                .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
 
     @Override
-    @Nullable
-    public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
-            ServerLevelAccessor level,
-            DifficultyInstance difficulty,
-            MobSpawnType reason,
-            @Nullable net.minecraft.world.entity.SpawnGroupData spawnData) {
-        var data = super.finalizeSpawn(level, difficulty, reason, spawnData);
-
-        this.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.SPLASH_POTION));
-
-        return data;
+    protected void registerGoals() {
+        super.registerGoals();
+        this.goalSelector.addGoal(3, new StayNearMonumentGoal(this, 1.00D, 30, 25));
     }
 }

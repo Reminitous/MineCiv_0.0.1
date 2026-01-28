@@ -6,13 +6,15 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.StringTag;
 
+import net.reminitous.mineciv.npc.NpcRoleType;
+
 import java.util.*;
 
 public final class Civilization {
 
     private final UUID id;
     private String name;
-    private CivClassType classType;
+    private CivClass classType;
 
     private UUID leader;
     private final Set<UUID> members = new HashSet<>();
@@ -38,6 +40,110 @@ public final class Civilization {
 
     private final Set<UUID> npcIds = new HashSet<>();
 
+    // ---------------- NEW: leader-chosen desired NPC composition ----------------
+    // Desired counts per role (leader controlled). Only roles allowed by classType are honored.
+    private final EnumMap<NpcRoleType, Integer> desiredNpcCounts = new EnumMap<>(NpcRoleType.class);
+
+    // Hard max cap (final clamp) - tweak as you like.
+    private static final int MAX_NPC_CAP = 15;
+
+    /** Total NPC cap for this civ based on civLevel, with a reasonable max. */
+    public int npcCap() {
+        // Example: 3, 6, 9, 12, 15...
+        int cap = 3 * Math.max(1, civLevel);
+        return Math.min(cap, MAX_NPC_CAP);
+    }
+
+    /** Returns a copy of desired counts. */
+    public Map<NpcRoleType, Integer> desiredNpcCounts() {
+        return Collections.unmodifiableMap(desiredNpcCounts);
+    }
+
+    /** Get desired count for a role (0 if not set). */
+    public int desiredCount(NpcRoleType role) {
+        if (role == null) return 0;
+        return Math.max(0, desiredNpcCounts.getOrDefault(role, 0));
+    }
+
+    /**
+     * Set desired count for a role. (Call from leader commands/UI.)
+     * This does NOT spawn instantly; the spawn manager will maintain counts on tick.
+     */
+    public void setDesiredCount(NpcRoleType role, int count) {
+        if (role == null) return;
+        desiredNpcCounts.put(role, Math.max(0, count));
+        clampDesiredToCapAndClass();
+    }
+
+    /** Wipes desired counts not allowed by this civ's class, and clamps totals to cap. */
+    public void clampDesiredToCapAndClass() {
+        CivClass ct = (classType == null) ? CivClass.AGRICULTURAL : classType;
+        Set<NpcRoleType> allowed = NpcRoleType.allowedFor(ct);
+
+        // Remove disallowed roles
+        desiredNpcCounts.keySet().removeIf(r -> !allowed.contains(r));
+
+        // Clamp totals to cap
+        int cap = npcCap();
+        int total = 0;
+        for (NpcRoleType r : allowed) total += desiredCount(r);
+
+        if (total <= cap) return;
+
+        // Reduce counts deterministically in a stable order until total fits cap.
+        // (Later you can reduce the "largest" first, or reduce non-core roles first.)
+        for (NpcRoleType r : allowed) {
+            int v = desiredCount(r);
+            while (v > 0 && total > cap) {
+                v--;
+                total--;
+            }
+            desiredNpcCounts.put(r, v);
+            if (total <= cap) break;
+        }
+    }
+
+    /**
+     * If leader hasn't chosen anything yet, we can provide a default distribution
+     * so civs aren't empty.
+     */
+    public void ensureDefaultDesiredIfEmpty() {
+        clampDesiredToCapAndClass();
+
+        int sum = 0;
+        for (int v : desiredNpcCounts.values()) sum += Math.max(0, v);
+        if (sum > 0) return;
+
+        CivClass ct = (classType == null) ? CivClass.AGRICULTURAL : classType;
+        int cap = npcCap();
+
+        // Very simple defaults:
+        switch (ct) {
+            case AGRICULTURAL -> {
+                // farmers heavy
+                desiredNpcCounts.put(NpcRoleType.FARMER, Math.max(1, cap - 1));
+                desiredNpcCounts.put(NpcRoleType.LUMBERJACK, Math.min(1, cap));
+                desiredNpcCounts.put(NpcRoleType.SHEPHERD, Math.min(1, Math.max(0, cap - (cap - 1) - 1)));
+            }
+            case WARLIKE -> {
+                desiredNpcCounts.put(NpcRoleType.PATROL, Math.max(1, cap - 2));
+                desiredNpcCounts.put(NpcRoleType.KNIGHT, Math.min(1, cap));
+                desiredNpcCounts.put(NpcRoleType.ARCHER, Math.min(1, Math.max(0, cap - (cap - 2) - 1)));
+            }
+            case TECHNOLOGY -> {
+                desiredNpcCounts.put(NpcRoleType.MINER, Math.max(1, cap - 1));
+                desiredNpcCounts.put(NpcRoleType.WORKER, Math.min(1, cap));
+            }
+            case MYSTIC -> {
+                desiredNpcCounts.put(NpcRoleType.WIZARD, Math.max(1, cap - 2));
+                desiredNpcCounts.put(NpcRoleType.WITCH, Math.min(1, cap));
+                desiredNpcCounts.put(NpcRoleType.ENCHANTER, Math.min(1, Math.max(0, cap - (cap - 2) - 1)));
+            }
+        }
+
+        clampDesiredToCapAndClass();
+    }
+
     public void addCivXp(long amount) {
         if (amount <= 0) return;
         civXp += amount;
@@ -47,6 +153,9 @@ public final class Civilization {
             civLevel++;
         }
         grantCreditsUpToCurrentLevel();
+
+        // NEW: cap may change when level changes, so clamp desired counts
+        clampDesiredToCapAndClass();
     }
 
     private static long xpForNextLevel(int level) {
@@ -101,8 +210,12 @@ public final class Civilization {
     public String name() { return name; }
     public void setName(String name) { this.name = name; }
 
-    public CivClassType classType() { return classType; }
-    public void setClassType(CivClassType classType) { this.classType = classType; }
+    public CivClass classType() { return classType; }
+    public void setClassType(CivClass classType) {
+        this.classType = classType;
+        // NEW: class changed => clamp desired to allowed roles
+        clampDesiredToCapAndClass();
+    }
 
     public UUID leader() { return leader; }
     public void setLeader(UUID leader) { this.leader = leader; }
@@ -152,7 +265,7 @@ public final class Civilization {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("Id", id);
         tag.putString("Name", name == null ? "" : name);
-        tag.putString("ClassType", (classType == null ? CivClassType.AGRICULTURAL : classType).name());
+        tag.putString("ClassType", (classType == null ? CivClass.AGRICULTURAL : classType).name());
         tag.putUUID("Leader", leader == null ? new UUID(0L, 0L) : leader);
 
         tag.putLong("CivXp", civXp);
@@ -211,6 +324,19 @@ public final class Civilization {
         }
         tag.put("NpcIds", npcs);
 
+        // ---- NEW: Desired NPC composition (SAVE) ----
+        // Stored as list of {Role:"FARMER", Count:3}
+        ListTag desired = new ListTag();
+        for (Map.Entry<NpcRoleType, Integer> e : desiredNpcCounts.entrySet()) {
+            if (e.getKey() == null) continue;
+            int c = Math.max(0, e.getValue() == null ? 0 : e.getValue());
+            CompoundTag t = new CompoundTag();
+            t.putString("Role", e.getKey().name());
+            t.putInt("Count", c);
+            desired.add(t);
+        }
+        tag.put("DesiredNpcCounts", desired);
+
         return tag;
     }
 
@@ -219,7 +345,7 @@ public final class Civilization {
         Civilization civ = new Civilization(id);
 
         civ.name = tag.getString("Name");
-        civ.classType = CivClassType.valueOf(tag.getString("ClassType"));
+        civ.classType = CivClass.valueOf(tag.getString("ClassType"));
 
         UUID leader = tag.getUUID("Leader");
         civ.leader = (leader.getLeastSignificantBits() == 0L && leader.getMostSignificantBits() == 0L) ? null : leader;
@@ -274,6 +400,23 @@ public final class Civilization {
             CompoundTag t = npcs.getCompound(i);
             civ.addNpcId(t.getUUID("Id"));
         }
+
+        // ---- NEW: Desired NPC composition (LOAD) ----
+        ListTag desired = tag.getList("DesiredNpcCounts", 10);
+        for (int i = 0; i < desired.size(); i++) {
+            CompoundTag t = desired.getCompound(i);
+            if (!t.contains("Role")) continue;
+            String roleName = t.getString("Role");
+            int count = t.getInt("Count");
+            try {
+                NpcRoleType role = NpcRoleType.valueOf(roleName);
+                civ.desiredNpcCounts.put(role, Math.max(0, count));
+            } catch (Exception ignored) {}
+        }
+
+        // Ensure legality after load
+        civ.clampDesiredToCapAndClass();
+        civ.ensureDefaultDesiredIfEmpty();
 
         return civ;
     }

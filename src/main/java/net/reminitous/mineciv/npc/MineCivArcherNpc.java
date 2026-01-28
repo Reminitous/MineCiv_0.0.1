@@ -1,43 +1,100 @@
 package net.reminitous.mineciv.npc;
 
-import net.minecraft.world.DifficultyInstance;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.RangedBowAttackGoal;
+import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.monster.RangedAttackMob;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 
-import javax.annotation.Nullable;
+import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
-public final class MineCivArcherNpc extends MineCivNpcBase {
+public class MineCivArcherNpc extends MineCivNpcBase implements RangedAttackMob {
 
     public MineCivArcherNpc(EntityType<? extends MineCivArcherNpc> type, Level level) {
         super(type, level);
-        setRole("archer");
+        setRole("ARCHER");
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        return createLivingAttributes()
-                .add(Attributes.MAX_HEALTH, 20.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.5D)
-                .add(Attributes.FOLLOW_RANGE, 40.0D);
+        return MineCivNpcBase.createBaseAttributes()
+                .add(Attributes.MAX_HEALTH, 24.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.52D)
+                .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
 
     @Override
-    @Nullable
+    protected void registerGoals() {
+        super.registerGoals();
+
+        // Patrol/guard near monument
+        this.goalSelector.addGoal(2, new StayNearMonumentGoal(this, 0.90D, 28, 30));
+
+        // Combat goals
+        this.goalSelector.addGoal(4, new RangedBowAttackGoal<>(this, 1.0D, 20, 16.0F));
+        this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+    }
+
+    @Override
     public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
             ServerLevelAccessor level,
-            DifficultyInstance difficulty,
+            net.minecraft.world.DifficultyInstance difficulty,
             MobSpawnType reason,
-            @Nullable net.minecraft.world.entity.SpawnGroupData spawnData) {
+            net.minecraft.world.entity.SpawnGroupData spawnData
+    ) {
         var data = super.finalizeSpawn(level, difficulty, reason, spawnData);
 
-        this.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.BOW));
-        this.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND, new ItemStack(Items.ARROW));
+        // Equip bow + some arrows
+        this.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
+        this.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.ARROW, 32));
+
+        this.setDropChance(EquipmentSlot.MAINHAND, 0.0F);
+        this.setDropChance(EquipmentSlot.OFFHAND, 0.0F);
 
         return data;
+    }
+
+    @Override
+    public void performRangedAttack(LivingEntity target, float distanceFactor) {
+        Arrow arrow = new Arrow(this.level(), this);
+
+        double dx = target.getX() - this.getX();
+        double dy = target.getY(0.3333333333333333D) - arrow.getY();
+        double dz = target.getZ() - this.getZ();
+        double dist = Math.sqrt(dx * dx + dz * dz);
+
+        arrow.shoot(dx, dy + dist * 0.2D, dz, 1.6F, 10.0F);
+        arrow.setBaseDamage(3.0D);
+        arrow.setCritArrow(this.random.nextFloat() < 0.25F);
+
+        this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F,
+                1.0F / (this.random.nextFloat() * 0.4F + 0.8F));
+
+        this.level().addFreshEntity(arrow);
+
+        // Consume “ammo” logically
+        ItemStack off = this.getItemInHand(InteractionHand.OFF_HAND);
+        if (off.is(Items.ARROW) && off.getCount() > 0) {
+            off.shrink(1);
+        }
+    }
+
+    @Override
+    public AbstractArrow getArrow(ItemStack arrowStack, float distanceFactor) {
+        return new Arrow(this.level(), this);
     }
 }

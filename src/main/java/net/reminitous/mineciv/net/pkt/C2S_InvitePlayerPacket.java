@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.network.CustomPayloadEvent;
 import net.minecraftforge.network.PacketDistributor;
 
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.net.Network;
@@ -85,7 +86,7 @@ public final class C2S_InvitePlayerPacket {
                     new S2C_OpenInvitePopupPacket(
                             civ.id(),
                             civ.name() == null ? "" : civ.name(),
-                            civ.classType() == null ? net.reminitous.mineciv.civ.CivClassType.AGRICULTURAL : civ.classType()
+                            civ.classType() == null ? CivClass.AGRICULTURAL : civ.classType()
                     ),
                     PacketDistributor.PLAYER.with(target)
             );

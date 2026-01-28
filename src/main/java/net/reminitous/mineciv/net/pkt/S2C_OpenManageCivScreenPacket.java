@@ -7,7 +7,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.event.network.CustomPayloadEvent;
 
 import net.reminitous.mineciv.client.screen.ManageCivScreen;
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +18,7 @@ public final class S2C_OpenManageCivScreenPacket {
     public final BlockPos monumentPos;
     public final UUID civId;
     public final String civName;
-    public final CivClassType classType;
+    public final CivClass classType;
 
     public final int civLevel;
     public final long civXp;
@@ -46,7 +46,7 @@ public final class S2C_OpenManageCivScreenPacket {
             BlockPos monumentPos,
             UUID civId,
             String civName,
-            CivClassType classType,
+            CivClass classType,
             int civLevel,
             long civXp,
             int memberCount,
@@ -96,7 +96,7 @@ public final class S2C_OpenManageCivScreenPacket {
 
         buf.writeUUID(msg.civId);
         buf.writeUtf(msg.civName == null ? "" : msg.civName, 32);
-        buf.writeEnum(msg.classType == null ? CivClassType.AGRICULTURAL : msg.classType);
+        buf.writeEnum(msg.classType == null ? CivClass.AGRICULTURAL : msg.classType);
 
         buf.writeVarInt(msg.civLevel);
         buf.writeVarLong(msg.civXp);
@@ -131,7 +131,7 @@ public final class S2C_OpenManageCivScreenPacket {
 
         UUID civId = buf.readUUID();
         String civName = buf.readUtf(32);
-        CivClassType classType = buf.readEnum(CivClassType.class);
+        CivClass classType = buf.readEnum(CivClass.class);
 
         int civLevel = buf.readVarInt();
         long civXp = buf.readVarLong();

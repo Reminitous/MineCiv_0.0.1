@@ -19,7 +19,7 @@ import net.minecraft.world.phys.BlockHitResult;
 
 import net.minecraftforge.network.PacketDistributor;
 
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.net.Network;
@@ -228,7 +228,7 @@ public final class MonumentBlock extends BaseEntityBlock {
                         pos,
                         civ.id(),
                         civ.name() == null ? "" : civ.name(),
-                        civ.classType() == null ? CivClassType.AGRICULTURAL : civ.classType(),
+                        civ.classType() == null ? CivClass.AGRICULTURAL : civ.classType(),
                         civ.civLevel(),
                         civ.civXp(),
                         civ.members().size(),

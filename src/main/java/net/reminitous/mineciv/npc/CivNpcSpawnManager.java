@@ -11,165 +11,158 @@ import net.reminitous.mineciv.civ.CivSavedData;
 import net.reminitous.mineciv.civ.Civilization;
 import net.reminitous.mineciv.registry.ModEntities;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public final class CivNpcSpawnManager {
 
     private CivNpcSpawnManager() {}
 
-    /** How often we try to keep NPCs at their target counts (called from tick events). */
+    /* ---------------- Entry points ---------------- */
+
     public static void maintainAllCivs(ServerLevel overworldAuthority) {
         MinecraftServer server = overworldAuthority.getServer();
         CivSavedData data = CivSavedData.get(server);
 
         for (Civilization civ : new ArrayList<>(data.civs().values())) {
-            if (civ == null) continue;
-            maintainOneCiv(server, data, civ);
+            if (civ != null) {
+                maintainOneCiv(server, data, civ);
+            }
         }
     }
 
-    /** Ensure this civ has its target NPCs spawned & tracked. */
     public static void maintainOneCiv(MinecraftServer server, CivSavedData data, Civilization civ) {
         if (server == null || data == null || civ == null) return;
 
         BlockPos monument = civ.monumentPos();
         if (monument == null) return;
 
-        ServerLevel level = server.getLevel(Level.OVERWORLD); // v1: monument authority in overworld
-        if (level == null) return;
+        // For now: authority dimension is overworld (you can later use civ.monumentDimId())
+        ServerLevel level = server.getLevel(Level.OVERWORLD);
+        if (level == null || !level.hasChunkAt(monument)) return;
 
-        // Do not force-load
-        if (!level.hasChunkAt(monument)) return;
+        // Make sure desired counts exist and are legal
+        civ.ensureDefaultDesiredIfEmpty();
+        civ.clampDesiredToCapAndClass();
 
-        // 1) Clean invalid/dead UUIDs
+        // 1) Remove dead/invalid UUIDs
         cleanupNpcIds(server, civ);
 
-        // 2) Count existing by role (by entity type)
-        Counts existing = countExisting(server, civ);
+        // 2) Count existing NPCs by role
+        Map<NpcRoleType, Integer> existing = countExistingByRole(server, civ);
 
-        // 3) Target counts by civ level
-        Counts target = targetCountsForLevel(civ.civLevel());
-
-        int needFarmers = Math.max(0, target.farmers - existing.farmers);
-        int needArchers = Math.max(0, target.archers - existing.archers);
-        int needKnights = Math.max(0, target.knights - existing.knights);
-
-        if (needFarmers == 0 && needArchers == 0 && needKnights == 0) return;
-
-        // 4) Spawn missing near monument
-        for (int i = 0; i < needFarmers; i++) {
-            spawnOne(level, civ, Role.FARMER, monument);
-        }
-        for (int i = 0; i < needArchers; i++) {
-            spawnOne(level, civ, Role.ARCHER, monument);
-        }
-        for (int i = 0; i < needKnights; i++) {
-            spawnOne(level, civ, Role.KNIGHT, monument);
+        // 3) Determine desired counts (already clamped by civ class + cap)
+        Map<NpcRoleType, Integer> desired = new EnumMap<>(NpcRoleType.class);
+        for (NpcRoleType role : NpcRoleType.values()) {
+            desired.put(role, civ.desiredCount(role));
         }
 
-        // Persist civ changes (npcIds)
+        // 4) Spawn missing
+        for (NpcRoleType role : NpcRoleType.values()) {
+            int have = existing.getOrDefault(role, 0);
+            int want = desired.getOrDefault(role, 0);
+            int need = Math.max(0, want - have);
+            for (int i = 0; i < need; i++) {
+                spawnOne(level, civ, role, monument);
+            }
+        }
+
         data.putCiv(civ);
-    }
-
-    /* ---------------- Targets ---------------- */
-
-    /**
-     * v1 progression table (change however you want):
-     * Level 1: 1 Farmer
-     * Level 2: 2 Farmers, 1 Archer
-     * Level 3: 2 Farmers, 2 Archers, 1 Knight
-     * Level 4+: 3 Farmers, 3 Archers, 2 Knights
-     */
-    private static Counts targetCountsForLevel(int lvl) {
-        if (lvl <= 1) return new Counts(1, 0, 0);
-        if (lvl == 2) return new Counts(2, 1, 0);
-        if (lvl == 3) return new Counts(2, 2, 1);
-        return new Counts(3, 3, 2);
     }
 
     /* ---------------- Spawning ---------------- */
 
-    private enum Role { FARMER, ARCHER, KNIGHT }
-
-    private static void spawnOne(ServerLevel level, Civilization civ, Role role, BlockPos monument) {
+    private static void spawnOne(ServerLevel level, Civilization civ, NpcRoleType role, BlockPos monument) {
         if (level == null || civ == null || role == null || monument == null) return;
 
-        Mob ent = switch (role) {
-            case FARMER -> ModEntities.NPC_FARMER.get().create(level);
-            case ARCHER -> ModEntities.NPC_ARCHER.get().create(level);
-            case KNIGHT -> ModEntities.NPC_KNIGHT.get().create(level);
-        };
+        Mob mob = createMobForRole(level, role);
+        if (mob == null) return;
 
-        if (ent == null) return;
+        BlockPos pos = findSpawnPosNear(level, monument, 6, level.random);
+        if (pos == null) return;
 
-        BlockPos spawnPos = findSpawnPosNear(level, monument, 6, level.random);
-        if (spawnPos == null) return;
+        mob.moveTo(
+                pos.getX() + 0.5,
+                pos.getY(),
+                pos.getZ() + 0.5,
+                level.random.nextFloat() * 360F,
+                0F
+        );
 
-        ent.moveTo(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, level.random.nextFloat() * 360F, 0F);
-
-        // Set civ id + role tags (you said you like tags too)
-        if (ent instanceof MineCivNpcBase base) {
-            base.setCivId(civ.id());
+        if (mob instanceof MineCivNpcBase base) {
+            base.bindToCiv(civ.id(), monument);
+            base.setRole(role.name());
+        } else {
+            // Failsafe: still store on persistent data if you ever spawn a non-base entity by mistake
+            mob.getPersistentData().putUUID("MineCivCivId", civ.id());
+            mob.getPersistentData().putString("MineCivRole", role.name());
         }
-        ent.getPersistentData().putUUID("MineCivCivId", civ.id());
-        ent.getPersistentData().putString("MineCivRole", role.name());
 
-        // Spawn
-        level.addFreshEntity(ent);
-
-        // Track it
-        civ.addNpcId(ent.getUUID());
+        level.addFreshEntity(mob);
+        civ.addNpcId(mob.getUUID());
     }
 
-    /** Find a spawnable position near the monument (no force-load). */
-    private static BlockPos findSpawnPosNear(ServerLevel level, BlockPos center, int radius, RandomSource rand) {
-        int r = Math.max(2, radius);
+    private static Mob createMobForRole(ServerLevel level, NpcRoleType role) {
+        return switch (role) {
+            case FARMER -> ModEntities.NPC_FARMER.get().create(level);
+            case SHEPHERD -> ModEntities.NPC_SHEPHERD.get().create(level);
+            case LUMBERJACK -> ModEntities.NPC_LUMBERJACK.get().create(level);
 
-        for (int tries = 0; tries < 20; tries++) {
-            int dx = rand.nextIntBetweenInclusive(-r, r);
-            int dz = rand.nextIntBetweenInclusive(-r, r);
+            case PATROL -> ModEntities.NPC_PATROL.get().create(level);
+            case KNIGHT -> ModEntities.NPC_KNIGHT.get().create(level);
+            case ARCHER -> ModEntities.NPC_ARCHER.get().create(level);
 
-            BlockPos p = center.offset(dx, 0, dz);
+            case WORKER -> ModEntities.NPC_WORKER.get().create(level);
+            case MINER -> ModEntities.NPC_MINER.get().create(level);
 
-            // Find topmost solid ground near p (within a small vertical scan)
-            BlockPos top = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, p);
+            case WITCH -> ModEntities.NPC_WITCH.get().create(level);
+            case WIZARD -> ModEntities.NPC_WIZARD.get().create(level);
+            case ENCHANTER -> ModEntities.NPC_ENCHANTER.get().create(level);
+        };
+    }
 
-            // Need standing space: block at feet empty and head empty, block below solid
-            BlockPos feet = top;
-            BlockPos head = top.above();
-            BlockPos below = top.below();
+    /* ---------------- Spawn positioning ---------------- */
 
-            if (!level.getBlockState(below).isSolid()) continue;
-            if (!level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()) continue;
-            if (!level.getBlockState(head).getCollisionShape(level, head).isEmpty()) continue;
+    private static BlockPos findSpawnPosNear(
+            ServerLevel level,
+            BlockPos center,
+            int radius,
+            RandomSource rand
+    ) {
+        for (int i = 0; i < 20; i++) {
+            int dx = rand.nextIntBetweenInclusive(-radius, radius);
+            int dz = rand.nextIntBetweenInclusive(-radius, radius);
 
-            // Avoid spawning inside the monument itself
-            if (feet.closerThan(center, 2.0)) continue;
+            BlockPos top = level.getHeightmapPos(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    center.offset(dx, 0, dz)
+            );
 
-            return feet;
+            if (!level.getBlockState(top.below()).isSolid()) continue;
+            if (!level.getBlockState(top).getCollisionShape(level, top).isEmpty()) continue;
+            if (!level.getBlockState(top.above()).getCollisionShape(level, top.above()).isEmpty()) continue;
+            if (top.closerThan(center, 2.0)) continue;
+
+            return top;
         }
-
-        // fallback: 1 block above monument
-        BlockPos fallback = center.above();
-        if (level.getBlockState(fallback).getCollisionShape(level, fallback).isEmpty()) return fallback;
 
         return null;
     }
 
-    /* ---------------- Counting / cleanup ---------------- */
+    /* ---------------- Counting & cleanup ---------------- */
 
     private static void cleanupNpcIds(MinecraftServer server, Civilization civ) {
         List<UUID> ids = new ArrayList<>(civ.npcIds());
+
         for (UUID id : ids) {
-            if (id == null) {
-                civ.removeNpcId(null);
-                continue;
-            }
+            if (id == null) continue;
 
             boolean found = false;
             for (ServerLevel dim : server.getAllLevels()) {
-                var e = dim.getEntity(id);
-                if (e != null) {
+                if (dim.getEntity(id) != null) {
                     found = true;
                     break;
                 }
@@ -179,8 +172,9 @@ public final class CivNpcSpawnManager {
         }
     }
 
-    private static Counts countExisting(MinecraftServer server, Civilization civ) {
-        int farmers = 0, archers = 0, knights = 0;
+    private static Map<NpcRoleType, Integer> countExistingByRole(MinecraftServer server, Civilization civ) {
+        EnumMap<NpcRoleType, Integer> counts = new EnumMap<>(NpcRoleType.class);
+        for (NpcRoleType r : NpcRoleType.values()) counts.put(r, 0);
 
         for (UUID id : civ.npcIds()) {
             if (id == null) continue;
@@ -189,15 +183,30 @@ public final class CivNpcSpawnManager {
                 var e = dim.getEntity(id);
                 if (e == null) continue;
 
-                if (e instanceof MineCivFarmerNpc) farmers++;
-                else if (e instanceof MineCivLumberjackNpc) archers++;
-                else if (e instanceof MineCivLumberjackNpc) knights++;
+                if (e instanceof MineCivFarmerNpc) inc(counts, NpcRoleType.FARMER);
+                else if (e instanceof MineCivShepherdNpc) inc(counts, NpcRoleType.SHEPHERD);
+                else if (e instanceof MineCivLumberjackNpc) inc(counts, NpcRoleType.LUMBERJACK);
+
+                else if (e instanceof MineCivPatrolNpc) inc(counts, NpcRoleType.PATROL);
+                else if (e instanceof MineCivKnightNpc) inc(counts, NpcRoleType.KNIGHT);
+                else if (e instanceof MineCivArcherNpc) inc(counts, NpcRoleType.ARCHER);
+
+                else if (e instanceof MineCivWorkerNpc) inc(counts, NpcRoleType.WORKER);
+                else if (e instanceof MineCivMinerNpc) inc(counts, NpcRoleType.MINER);
+
+                else if (e instanceof MineCivWitchNpc) inc(counts, NpcRoleType.WITCH);
+                else if (e instanceof MineCivWizardNpc) inc(counts, NpcRoleType.WIZARD);
+                else if (e instanceof MineCivEnchanterNpc) inc(counts, NpcRoleType.ENCHANTER);
+
+                // found entity for this UUID; stop scanning dims
                 break;
             }
         }
 
-        return new Counts(farmers, archers, knights);
+        return counts;
     }
 
-    private record Counts(int farmers, int archers, int knights) {}
+    private static void inc(EnumMap<NpcRoleType, Integer> counts, NpcRoleType role) {
+        counts.put(role, counts.getOrDefault(role, 0) + 1);
+    }
 }

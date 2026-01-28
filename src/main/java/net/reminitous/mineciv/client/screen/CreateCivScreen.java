@@ -8,7 +8,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
-import net.reminitous.mineciv.civ.CivClassType;
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.net.pkt.C2S_CreateCivPacket;
 
@@ -17,7 +17,7 @@ public final class CreateCivScreen extends Screen {
     private final BlockPos monumentPos;
 
     private EditBox nameBox;
-    private CivClassType selectedClass = CivClassType.AGRICULTURAL;
+    private CivClass selectedClass = CivClass.AGRICULTURAL;
 
     public CreateCivScreen(BlockPos monumentPos) {
         super(Component.literal("Create Civilization"));
@@ -88,12 +88,12 @@ public final class CreateCivScreen extends Screen {
         super.render(gfx, mouseX, mouseY, partialTicks);
     }
 
-    private static CivClassType next(CivClassType t) {
-        CivClassType[] vals = CivClassType.values();
+    private static CivClass next(CivClass t) {
+        CivClass[] vals = CivClass.values();
         return vals[(t.ordinal() + 1) % vals.length];
     }
 
-    private static String pretty(CivClassType t) {
+    private static String pretty(CivClass t) {
         return switch (t) {
             case AGRICULTURAL -> "Agricultural";
             case WARLIKE -> "Warlike";

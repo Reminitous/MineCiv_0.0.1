@@ -1,41 +1,66 @@
 package net.reminitous.mineciv.npc;
 
-import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
+import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 
-import javax.annotation.Nullable;
+import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
-public final class MineCivKnightNpc extends MineCivNpcBase {
+public class MineCivKnightNpc extends MineCivNpcBase {
 
-    public MineCivKnightNpc(EntityType<? extends MineCivLumberjackNpc> type, Level level) {
+    public MineCivKnightNpc(EntityType<? extends MineCivKnightNpc> type, Level level) {
         super(type, level);
-        setRole("knight");
+        setRole("KNIGHT");
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        return createLivingAttributes()
+        return MineCivNpcBase.createBaseAttributes()
                 .add(Attributes.MAX_HEALTH, 30.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.8D)
-                .add(Attributes.FOLLOW_RANGE, 32.0D);
+                .add(Attributes.ARMOR, 6.0D)
+                .add(Attributes.ATTACK_DAMAGE, 6.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.50D)
+                .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
 
     @Override
-    @Nullable
+    protected void registerGoals() {
+        super.registerGoals();
+
+        this.goalSelector.addGoal(2, new StayNearMonumentGoal(this, 0.95D, 26, 25));
+        this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.05D, true));
+
+        this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+    }
+
+    @Override
     public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
             ServerLevelAccessor level,
-            DifficultyInstance difficulty,
+            net.minecraft.world.DifficultyInstance difficulty,
             MobSpawnType reason,
-            @Nullable net.minecraft.world.entity.SpawnGroupData spawnData) {
+            net.minecraft.world.entity.SpawnGroupData spawnData
+    ) {
         var data = super.finalizeSpawn(level, difficulty, reason, spawnData);
 
-        this.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
+        this.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+        this.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+        this.setItemSlot(EquipmentSlot.LEGS, new ItemStack(Items.IRON_LEGGINGS));
+        this.setItemSlot(EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS));
+
+        this.setDropChance(EquipmentSlot.MAINHAND, 0.0F);
+        this.setDropChance(EquipmentSlot.CHEST, 0.0F);
+        this.setDropChance(EquipmentSlot.LEGS, 0.0F);
+        this.setDropChance(EquipmentSlot.FEET, 0.0F);
 
         return data;
     }

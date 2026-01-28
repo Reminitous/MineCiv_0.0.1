@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 
 import net.minecraftforge.network.PacketDistributor;
 
+import net.reminitous.mineciv.civ.CivClass;
 import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.net.pkt.C2S_CancelInvitePacket;
 import net.reminitous.mineciv.net.pkt.C2S_ClaimCurrentChunkPacket;
@@ -364,7 +365,7 @@ public final class ManageCivScreen extends Screen {
         super.render(gfx, mouseX, mouseY, partialTicks);
     }
 
-    private static String pretty(net.reminitous.mineciv.civ.CivClassType t) {
+    private static String pretty(CivClass t) {
         if (t == null) return "Unknown";
         return switch (t) {
             case AGRICULTURAL -> "Agricultural";
