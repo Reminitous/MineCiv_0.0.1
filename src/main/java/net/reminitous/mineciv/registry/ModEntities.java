@@ -10,7 +10,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
 
 import net.reminitous.mineciv.MineCiv;
-import net.reminitous.mineciv.npc.MineCivKnightNpc;
+import net.reminitous.mineciv.npc.MineCivLumberjackNpc;
 import net.reminitous.mineciv.npc.MineCivFarmerNpc;
 
 public final class ModEntities {
@@ -18,17 +18,17 @@ public final class ModEntities {
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES =
             DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MineCiv.MOD_ID);
 
-    public static final RegistryObject<EntityType<MineCivKnightNpc>> NPC_ARCHER =
+    public static final RegistryObject<EntityType<MineCivLumberjackNpc>> NPC_ARCHER =
             ENTITY_TYPES.register("npc_archer", () ->
-                    EntityType.Builder.of(MineCivKnightNpc::new, MobCategory.CREATURE)
+                    EntityType.Builder.of(MineCivLumberjackNpc::new, MobCategory.CREATURE)
                             .sized(0.6F, 1.95F)
                             .clientTrackingRange(8)
                             .build(MineCiv.MOD_ID + ":npc_archer")
             );
 
-    public static final RegistryObject<EntityType<MineCivKnightNpc>> NPC_KNIGHT =
+    public static final RegistryObject<EntityType<MineCivLumberjackNpc>> NPC_KNIGHT =
             ENTITY_TYPES.register("npc_knight", () ->
-                    EntityType.Builder.of(MineCivKnightNpc::new, MobCategory.CREATURE)
+                    EntityType.Builder.of(MineCivLumberjackNpc::new, MobCategory.CREATURE)
                             .sized(0.6F, 1.95F)
                             .clientTrackingRange(8)
                             .build(MineCiv.MOD_ID + ":npc_knight")
@@ -50,8 +50,8 @@ public final class ModEntities {
 
     /** Call from an EntityAttributeCreationEvent listener on the MOD bus */
     public static void onAttributes(EntityAttributeCreationEvent e) {
-        e.put(NPC_ARCHER.get(), MineCivKnightNpc.createAttributes().build());
-        e.put(NPC_KNIGHT.get(), MineCivKnightNpc.createAttributes().build());
+        e.put(NPC_ARCHER.get(), MineCivLumberjackNpc.createAttributes().build());
+        e.put(NPC_KNIGHT.get(), MineCivLumberjackNpc.createAttributes().build());
         e.put(NPC_FARMER.get(), MineCivFarmerNpc.createAttributes().build());
     }
 }

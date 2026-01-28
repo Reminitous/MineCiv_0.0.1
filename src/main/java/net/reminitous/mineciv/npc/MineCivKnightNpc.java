@@ -14,7 +14,7 @@ import javax.annotation.Nullable;
 
 public final class MineCivKnightNpc extends MineCivNpcBase {
 
-    public MineCivKnightNpc(EntityType<? extends MineCivKnightNpc> type, Level level) {
+    public MineCivKnightNpc(EntityType<? extends MineCivLumberjackNpc> type, Level level) {
         super(type, level);
         setRole("knight");
     }

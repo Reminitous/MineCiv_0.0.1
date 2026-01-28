@@ -190,8 +190,8 @@ public final class CivNpcSpawnManager {
                 if (e == null) continue;
 
                 if (e instanceof MineCivFarmerNpc) farmers++;
-                else if (e instanceof MineCivKnightNpc) archers++;
-                else if (e instanceof MineCivKnightNpc) knights++;
+                else if (e instanceof MineCivLumberjackNpc) archers++;
+                else if (e instanceof MineCivLumberjackNpc) knights++;
                 break;
             }
         }
