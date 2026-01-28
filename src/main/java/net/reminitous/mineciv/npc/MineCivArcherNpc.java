@@ -6,6 +6,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.RangedBowAttackGoal;
@@ -13,13 +14,13 @@ import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.RangedAttackMob;
-import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 
+import net.reminitous.mineciv.npc.ai.CivAggressorTargetGoal;
 import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
 public class MineCivArcherNpc extends MineCivNpcBase implements RangedAttackMob {
@@ -45,18 +46,20 @@ public class MineCivArcherNpc extends MineCivNpcBase implements RangedAttackMob 
 
         // Combat goals
         this.goalSelector.addGoal(4, new RangedBowAttackGoal<>(this, 1.0D, 20, 16.0F));
+
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+        this.targetSelector.addGoal(3, new CivAggressorTargetGoal(this)); // players who attacked civ recently
     }
 
     @Override
-    public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
+    public SpawnGroupData finalizeSpawn(
             ServerLevelAccessor level,
             net.minecraft.world.DifficultyInstance difficulty,
             MobSpawnType reason,
-            net.minecraft.world.entity.SpawnGroupData spawnData
+            SpawnGroupData spawnData
     ) {
-        var data = super.finalizeSpawn(level, difficulty, reason, spawnData);
+        SpawnGroupData data = super.finalizeSpawn(level, difficulty, reason, spawnData);
 
         // Equip bow + some arrows
         this.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
@@ -70,19 +73,27 @@ public class MineCivArcherNpc extends MineCivNpcBase implements RangedAttackMob 
 
     @Override
     public void performRangedAttack(LivingEntity target, float distanceFactor) {
-        Arrow arrow = new Arrow(this.level(), this);
+        // 1.21.x safe: create via EntityType
+        Arrow arrow = EntityType.ARROW.create(this.level());
+        if (arrow == null) return;
+
+        arrow.setOwner(this);
+        arrow.setPos(this.getX(), this.getEyeY() - 0.1D, this.getZ());
 
         double dx = target.getX() - this.getX();
-        double dy = target.getY(0.3333333333333333D) - arrow.getY();
         double dz = target.getZ() - this.getZ();
+        double dy = target.getY(0.3333333333333333D) - arrow.getY();
         double dist = Math.sqrt(dx * dx + dz * dz);
 
         arrow.shoot(dx, dy + dist * 0.2D, dz, 1.6F, 10.0F);
         arrow.setBaseDamage(3.0D);
         arrow.setCritArrow(this.random.nextFloat() < 0.25F);
 
-        this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F,
-                1.0F / (this.random.nextFloat() * 0.4F + 0.8F));
+        this.playSound(
+                SoundEvents.SKELETON_SHOOT,
+                1.0F,
+                1.0F / (this.random.nextFloat() * 0.4F + 0.8F)
+        );
 
         this.level().addFreshEntity(arrow);
 
@@ -91,10 +102,5 @@ public class MineCivArcherNpc extends MineCivNpcBase implements RangedAttackMob 
         if (off.is(Items.ARROW) && off.getCount() > 0) {
             off.shrink(1);
         }
-    }
-
-    @Override
-    public AbstractArrow getArrow(ItemStack arrowStack, float distanceFactor) {
-        return new Arrow(this.level(), this);
     }
 }

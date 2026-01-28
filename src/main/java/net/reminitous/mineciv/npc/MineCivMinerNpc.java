@@ -19,16 +19,17 @@ public class MineCivMinerNpc extends MineCivNpcBase {
         setRole("MINER");
     }
 
-    public static AttributeSupplier.Builder createAttributes() {
-        return MineCivNpcBase.createBaseAttributes()
-                .add(Attributes.MAX_HEALTH, 26.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.48D);
-    }
-
     @Override
     protected void registerGoals() {
         super.registerGoals();
         this.goalSelector.addGoal(3, new StayNearMonumentGoal(this, 0.90D, 30, 30));
+        this.goalSelector.addGoal(2, new net.reminitous.mineciv.npc.ai.MinerWorkGoal(this, 0.95D, 18, 20));
+    }
+
+    public static AttributeSupplier.Builder createAttributes() {
+        return MineCivNpcBase.createBaseAttributes()
+                .add(Attributes.MAX_HEALTH, 26.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.48D);
     }
 
     @Override

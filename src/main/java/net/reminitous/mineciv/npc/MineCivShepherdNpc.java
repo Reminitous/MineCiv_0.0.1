@@ -5,6 +5,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
 
+import net.reminitous.mineciv.npc.ai.ShepherdWorkGoal;
 import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
 public class MineCivShepherdNpc extends MineCivNpcBase {
@@ -23,6 +24,11 @@ public class MineCivShepherdNpc extends MineCivNpcBase {
     @Override
     protected void registerGoals() {
         super.registerGoals();
+
+        // Keep near town
         this.goalSelector.addGoal(3, new StayNearMonumentGoal(this, 0.90D, 26, 35));
+
+        // Breed animals in territory
+        this.goalSelector.addGoal(2, new ShepherdWorkGoal(this, 0.95D, 18, 20));
     }
 }

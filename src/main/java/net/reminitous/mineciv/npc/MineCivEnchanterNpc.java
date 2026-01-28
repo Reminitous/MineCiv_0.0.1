@@ -5,6 +5,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
 
+import net.reminitous.mineciv.npc.ai.EnchanterGenerateGoal;
 import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
 public class MineCivEnchanterNpc extends MineCivNpcBase {
@@ -24,6 +25,8 @@ public class MineCivEnchanterNpc extends MineCivNpcBase {
     @Override
     protected void registerGoals() {
         super.registerGoals();
+
         this.goalSelector.addGoal(3, new StayNearMonumentGoal(this, 0.95D, 26, 30));
+        this.goalSelector.addGoal(2, new EnchanterGenerateGoal(this, 0.95D, 24));
     }
 }

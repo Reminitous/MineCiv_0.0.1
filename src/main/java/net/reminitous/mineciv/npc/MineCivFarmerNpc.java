@@ -6,6 +6,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
 
 import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
+import net.reminitous.mineciv.npc.ai.FarmerWorkGoal;
 
 public class MineCivFarmerNpc extends MineCivNpcBase {
 
@@ -24,6 +25,11 @@ public class MineCivFarmerNpc extends MineCivNpcBase {
     @Override
     protected void registerGoals() {
         super.registerGoals();
+
+        // Stay around monument (town center)
         this.goalSelector.addGoal(3, new StayNearMonumentGoal(this, 0.85D, 24, 40));
+
+        // Actual farming work (higher priority than wandering)
+        this.goalSelector.addGoal(2, new FarmerWorkGoal(this, 0.95D, 12, 16));
     }
 }

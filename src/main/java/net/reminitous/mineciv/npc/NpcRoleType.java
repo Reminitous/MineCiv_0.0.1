@@ -33,6 +33,9 @@ public enum NpcRoleType {
             case WARLIKE -> EnumSet.of(PATROL, KNIGHT, ARCHER);
             case TECHNOLOGY -> EnumSet.of(WORKER, MINER);
             case MYSTIC -> EnumSet.of(WITCH, WIZARD, ENCHANTER);
+
+            // Required for switch exhaustiveness
+            default -> EnumSet.of(FARMER);
         };
     }
 }

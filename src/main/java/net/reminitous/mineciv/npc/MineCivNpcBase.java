@@ -66,7 +66,22 @@ public abstract class MineCivNpcBase extends PathfinderMob {
     /** Friendly-fire protection: do not allow damage to same-civ NPCs. */
     @Override
     public boolean hurt(DamageSource source, float amount) {
-        return super.hurt(source, amount);
+        boolean result = super.hurt(source, amount);
+
+        if (result && !this.level().isClientSide && this.getCivId() != null) {
+            var attacker = source.getEntity();
+            if (attacker instanceof net.minecraft.world.entity.player.Player p) {
+                var server = this.level().getServer();
+                if (server != null) {
+                    var data = net.reminitous.mineciv.civ.CivSavedData.get(server);
+                    long now = ((net.minecraft.server.level.ServerLevel) this.level()).getGameTime();
+                    // 2 minutes at 20 tps = 2400 ticks (tweak)
+                    data.markAggressor(this.getCivId(), p.getUUID(), now + 2400L);
+                }
+            }
+        }
+
+        return result;
     }
 
     @Override

@@ -171,4 +171,32 @@ public final class CivSavedData extends SavedData {
 
     public Map<UUID, UUID> pendingInvites() { return pendingInvites; }
 
+    // --- Aggression tracking (transient, not saved) ---
+    private final java.util.Map<java.util.UUID, java.util.Map<java.util.UUID, Long>> recentAggressors = new java.util.HashMap<>();
+
+    /** Mark a player as an aggressor against a civ until expireGameTime. */
+    public void markAggressor(java.util.UUID civId, java.util.UUID playerId, long expireGameTime) {
+        if (civId == null || playerId == null) return;
+        recentAggressors
+                .computeIfAbsent(civId, k -> new java.util.HashMap<>())
+                .put(playerId, expireGameTime);
+    }
+
+    /** True if the player is currently considered hostile to this civ. */
+    public boolean isAggressor(java.util.UUID civId, java.util.UUID playerId, long nowGameTime) {
+        if (civId == null || playerId == null) return false;
+        var map = recentAggressors.get(civId);
+        if (map == null) return false;
+
+        Long exp = map.get(playerId);
+        if (exp == null) return false;
+
+        if (nowGameTime > exp) {
+            map.remove(playerId);
+            return false;
+        }
+        return true;
+    }
+
+
 }

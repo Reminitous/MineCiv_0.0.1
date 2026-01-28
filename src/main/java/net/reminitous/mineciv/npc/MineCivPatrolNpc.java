@@ -3,6 +3,7 @@ package net.reminitous.mineciv.npc;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
@@ -14,6 +15,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 
+import net.reminitous.mineciv.npc.ai.CivAggressorTargetGoal;
 import net.reminitous.mineciv.npc.ai.StayNearMonumentGoal;
 
 public class MineCivPatrolNpc extends MineCivNpcBase {
@@ -41,16 +43,17 @@ public class MineCivPatrolNpc extends MineCivNpcBase {
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+        this.targetSelector.addGoal(3, new CivAggressorTargetGoal(this)); // <-- moved here
     }
 
     @Override
-    public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
+    public SpawnGroupData finalizeSpawn(
             ServerLevelAccessor level,
             net.minecraft.world.DifficultyInstance difficulty,
             MobSpawnType reason,
-            net.minecraft.world.entity.SpawnGroupData spawnData
+            SpawnGroupData spawnData
     ) {
-        var data = super.finalizeSpawn(level, difficulty, reason, spawnData);
+        SpawnGroupData data = super.finalizeSpawn(level, difficulty, reason, spawnData);
 
         this.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
         this.setDropChance(EquipmentSlot.MAINHAND, 0.0F);

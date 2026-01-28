@@ -29,7 +29,8 @@ public class StayNearMonumentGoal extends Goal {
     @Override
     public boolean canUse() {
         if (!(mob instanceof MineCivNpcBase base)) return false;
-        BlockPos home = base.homeMonument;
+
+        BlockPos home = base.getHomeMonument(); // ✅ use getter
         if (home == null) return false;
 
         if (cooldown-- > 0) return false;
@@ -41,7 +42,8 @@ public class StayNearMonumentGoal extends Goal {
     @Override
     public void start() {
         if (!(mob instanceof MineCivNpcBase base)) return;
-        BlockPos home = base.homeMonument;
+
+        BlockPos home = base.getHomeMonument(); // ✅ use getter
         if (home == null) return;
 
         // Move to a random point closer to home (not necessarily exactly on it)
