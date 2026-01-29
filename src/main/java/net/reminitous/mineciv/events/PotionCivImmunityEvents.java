@@ -42,6 +42,10 @@ public final class PotionCivImmunityEvents {
         Entity owner = thrown.getOwner();
         if (owner == null) return;
 
+// Only customize MineCiv NPC potions (prevents weird interactions with player potions / other mods)
+        if (!(owner instanceof net.reminitous.mineciv.npc.MineCivNpcBase)) return;
+
+
         MinecraftServer server = level.getServer();
         if (server == null) return;
 

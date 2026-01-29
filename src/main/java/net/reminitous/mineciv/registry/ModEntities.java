@@ -128,15 +128,16 @@ public final class ModEntities {
 
     /** Call from an EntityAttributeCreationEvent listener on the MOD bus */
     public static void onAttributes(EntityAttributeCreationEvent e) {
-        e.put(NPC_ARCHER.get(), MineCivArcherNpc.createAttributes().build());
-        e.put(NPC_KNIGHT.get(), MineCivKnightNpc.createAttributes().build());
-        e.put(NPC_PATROL.get(), MineCivPatrolNpc.createAttributes().build());
-
         e.put(NPC_FARMER.get(), MineCivFarmerNpc.createAttributes().build());
-        e.put(NPC_LUMBERJACK.get(), MineCivLumberjackNpc.createAttributes().build());
-        e.put(NPC_MINER.get(), MineCivMinerNpc.createAttributes().build());
-        e.put(NPC_WORKER.get(), MineCivWorkerNpc.createAttributes().build());
         e.put(NPC_SHEPHERD.get(), MineCivShepherdNpc.createAttributes().build());
+        e.put(NPC_LUMBERJACK.get(), MineCivLumberjackNpc.createAttributes().build());
+
+        e.put(NPC_PATROL.get(), MineCivPatrolNpc.createAttributes().build());
+        e.put(NPC_KNIGHT.get(), MineCivKnightNpc.createAttributes().build());
+        e.put(NPC_ARCHER.get(), MineCivArcherNpc.createAttributes().build());
+
+        e.put(NPC_WORKER.get(), MineCivWorkerNpc.createAttributes().build());
+        e.put(NPC_MINER.get(), MineCivMinerNpc.createAttributes().build());
 
         e.put(NPC_WITCH.get(), MineCivWitchNpc.createAttributes().build());
         e.put(NPC_WIZARD.get(), MineCivWizardNpc.createAttributes().build());

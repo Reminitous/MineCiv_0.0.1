@@ -15,9 +15,24 @@ public final class ClientNpcRenderers {
 
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers e) {
-        e.registerEntityRenderer(ModEntities.NPC_ARCHER.get(), ctx -> new MineCivVillagerNpcRenderer(ctx));
-        e.registerEntityRenderer(ModEntities.NPC_KNIGHT.get(), ctx -> new MineCivVillagerNpcRenderer(ctx));
-        e.registerEntityRenderer(ModEntities.NPC_FARMER.get(), ctx -> new MineCivVillagerNpcRenderer(ctx));
-        // add the rest as you register them in ModEntities
+
+        // Agricultural
+        e.registerEntityRenderer(ModEntities.NPC_FARMER.get(),     MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_SHEPHERD.get(),   MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_LUMBERJACK.get(), MineCivPlayerNpcRenderer::new);
+
+        // Warlike
+        e.registerEntityRenderer(ModEntities.NPC_PATROL.get(),     MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_KNIGHT.get(),     MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_ARCHER.get(),     MineCivPlayerNpcRenderer::new);
+
+        // Technology
+        e.registerEntityRenderer(ModEntities.NPC_WORKER.get(),     MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_MINER.get(),      MineCivPlayerNpcRenderer::new);
+
+        // Mystic
+        e.registerEntityRenderer(ModEntities.NPC_WITCH.get(),      MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_WIZARD.get(),     MineCivPlayerNpcRenderer::new);
+        e.registerEntityRenderer(ModEntities.NPC_ENCHANTER.get(),  MineCivPlayerNpcRenderer::new);
     }
 }

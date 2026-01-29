@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import net.reminitous.mineciv.net.Network;
 import net.reminitous.mineciv.registry.ModBlockEntities;
@@ -30,15 +29,18 @@ public final class MineCiv {
         ModBlocks.ITEMS.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
 
-        // If you have entities for NPC roles:
-        ModEntities.ENTITY_TYPES.register(modBus);
+        // ✅ Entities (NPCs)
+        ModEntities.register(modBus);
 
-        // If using loot modifiers:
+        // ✅ REQUIRED: register attribute creation
+        modBus.addListener(ModEntities::onAttributes);
+
+        // Loot modifiers
         ModLootModifiers.LOOT_MODIFIERS.register(modBus);
 
         Network.init();
 
-        // Creative tab hook on Forge event bus
+        // Creative tab hook
         modBus.addListener(MineCiv::addCreative);
     }
 
