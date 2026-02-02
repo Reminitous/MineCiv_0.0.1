@@ -65,6 +65,7 @@ public final class MineCivPlayerNpcRenderer extends HumanoidMobRenderer<MineCivN
 
     @Override
     public ResourceLocation getTextureLocation(MineCivNpcBase npc) {
+        // Now getRole() is public in MineCivNpcBase
         String role = npc.getRole();
         if (role == null || role.isBlank()) return TEX_DEFAULT;
 

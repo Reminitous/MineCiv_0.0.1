@@ -8,6 +8,8 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -37,6 +39,17 @@ public abstract class MineCivNpcBase extends PathfinderMob {
         this.setPersistenceRequired();
     }
 
+    /* ---------------- Attributes ---------------- */
+
+    /** Required for all PathfinderMob subclasses to define default attributes */
+    public static AttributeSupplier.Builder createBaseAttributes() {
+        return PathfinderMob.createMobAttributes()
+                .add(Attributes.MAX_HEALTH, 20.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.25D)
+                .add(Attributes.ATTACK_DAMAGE, 2.0D)
+                .add(Attributes.FOLLOW_RANGE, 16.0D);
+    }
+
     /* ---------------- Init ---------------- */
 
     @Override
@@ -49,16 +62,9 @@ public abstract class MineCivNpcBase extends PathfinderMob {
 
     @Override
     protected void registerGoals() {
-
         this.goalSelector.addGoal(0, new FloatGoal(this));
-
-        // Hard border enforcement
         this.goalSelector.addGoal(1, new ReturnToCivBorderGoal(this, 1.2D));
-
-        // Role-aware roaming
         this.goalSelector.addGoal(2, new RoleAwareWanderGoal(this, 1.0D));
-
-        // Fallback idle behavior
         this.goalSelector.addGoal(3, new RandomStrollGoal(this, 0.8D));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, net.minecraft.world.entity.player.Player.class, 6.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
@@ -75,6 +81,24 @@ public abstract class MineCivNpcBase extends PathfinderMob {
         this.entityData.set(ROLE, role == null ? "" : role);
     }
 
+    /* ---------------- Civ getters ---------------- */
+
+    /** Returns the role of this NPC (now public so renderers can access it) */
+    public String getRole() {
+        return entityData.get(ROLE);
+    }
+
+    /** Returns the UUID of the civilization this NPC belongs to */
+    public UUID getCivId() {
+        return entityData.get(CIV_ID).orElse(null);
+    }
+
+    /** Returns the monument (home) position of the civilization this NPC belongs to */
+    public BlockPos getHomeMonument() {
+        return entityData.get(MONUMENT_POS);
+    }
+
+
     protected Optional<Civilization> getCiv() {
         if (!(level() instanceof ServerLevel server)) return Optional.empty();
         Optional<UUID> id = entityData.get(CIV_ID);
@@ -86,18 +110,10 @@ public abstract class MineCivNpcBase extends PathfinderMob {
         return entityData.get(MONUMENT_POS);
     }
 
-    /**
-     * TEMPORARY radius logic.
-     * Replace later when you formalize civ borders.
-     */
     protected int getCivRadius() {
         return getCiv()
                 .map(c -> Math.max(16, c.claimedChunks().size() * 4))
                 .orElse(16);
-    }
-
-    protected String getRole() {
-        return entityData.get(ROLE);
     }
 
     /* ---------------- Persistence ---------------- */
@@ -105,7 +121,6 @@ public abstract class MineCivNpcBase extends PathfinderMob {
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
-
         entityData.get(CIV_ID).ifPresent(id -> tag.putUUID("MineCivCivId", id));
         tag.putLong("MineCivMonument", getMonument().asLong());
         tag.putString("MineCivRole", getRole());
@@ -114,26 +129,20 @@ public abstract class MineCivNpcBase extends PathfinderMob {
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
-
         if (tag.hasUUID("MineCivCivId")) {
             entityData.set(CIV_ID, Optional.of(tag.getUUID("MineCivCivId")));
         }
-
         if (tag.contains("MineCivMonument")) {
             entityData.set(MONUMENT_POS, BlockPos.of(tag.getLong("MineCivMonument")));
         }
-
         if (tag.contains("MineCivRole")) {
             entityData.set(ROLE, tag.getString("MineCivRole"));
         }
     }
 
-    /* ============================================================
-       ===================== AI GOALS =============================
-       ============================================================ */
+    /* ==================== AI GOALS ==================== */
 
     static class ReturnToCivBorderGoal extends Goal {
-
         private final MineCivNpcBase npc;
         private final double speed;
 
@@ -161,7 +170,6 @@ public abstract class MineCivNpcBase extends PathfinderMob {
     }
 
     static class RoleAwareWanderGoal extends Goal {
-
         private final MineCivNpcBase npc;
         private final double speed;
 
