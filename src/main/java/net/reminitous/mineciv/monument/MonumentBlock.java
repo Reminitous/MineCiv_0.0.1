@@ -14,6 +14,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -29,6 +31,7 @@ import net.reminitous.mineciv.net.pkt.S2C_OpenDisbandConfirmScreenPacket;
 import net.reminitous.mineciv.territory.TerritoryManager;
 import net.reminitous.mineciv.war.WarSavedData;
 import net.reminitous.mineciv.war.WarState;
+import net.reminitous.mineciv.registry.ModBlockEntities;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +54,23 @@ public final class MonumentBlock extends BaseEntityBlock {
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new MonumentBlockEntity(pos, state);
+    }
+
+    /**
+     * IMPORTANT: without this, MonumentBlockEntity::serverTick will NEVER RUN.
+     * Server-side only ticker.
+     */
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
+            Level level, BlockState state, BlockEntityType<T> type
+    ) {
+        if (level.isClientSide) return null;
+
+        return createTickerHelper(
+                type,
+                ModBlockEntities.MONUMENT.get(),
+                (lvl, pos, st, be) -> MonumentBlockEntity.serverTick(lvl, pos, st, (MonumentBlockEntity) be)
+        );
     }
 
     /** Right-click with empty hand */
@@ -88,22 +108,25 @@ public final class MonumentBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        super.onRemove(state, level, pos, newState, movedByPiston);
-
         // Only act if the block is actually being replaced (not just state change)
-        if (state.getBlock() == newState.getBlock()) return;
-        if (level.isClientSide) return;
-        if (!(level instanceof ServerLevel sLevel)) return;
+        if (state.getBlock() == newState.getBlock()) {
+            super.onRemove(state, level, pos, newState, movedByPiston);
+            return;
+        }
 
-        BlockEntity be = sLevel.getBlockEntity(pos);
-        if (!(be instanceof net.reminitous.mineciv.monument.MonumentBlockEntity monumentBE)) return;
-        if (!monumentBE.isBound()) return;
+        if (!level.isClientSide && level instanceof ServerLevel sLevel) {
+            // READ BE BEFORE super.onRemove removes it
+            BlockEntity be = sLevel.getBlockEntity(pos);
+            if (be instanceof MonumentBlockEntity monumentBE && monumentBE.isBound()) {
+                UUID civId = monumentBE.getCivId();
+                if (civId != null) {
+                    // Auto-disband even if it was broken in creative or removed unexpectedly
+                    net.reminitous.mineciv.civ.CivilizationManager.disbandCivByMonumentDestroyed(sLevel, civId, pos);
+                }
+            }
+        }
 
-        java.util.UUID civId = monumentBE.getCivId();
-        if (civId == null) return;
-
-        // Auto-disband even if it was broken in creative or removed unexpectedly
-        net.reminitous.mineciv.civ.CivilizationManager.disbandCivByMonumentDestroyed(sLevel, civId, pos);
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
     /* ================= CORE ================= */

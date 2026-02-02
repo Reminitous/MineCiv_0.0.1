@@ -38,6 +38,17 @@ public final class ManageCivScreen extends Screen {
 
     private boolean confirmDisband = false;
 
+    // Layout anchors so render() aligns text with buttons
+    private int _membersStartY = 0;
+    private int _pendingLabelY = 0;
+    private int _pendingStartY = 0;
+    private int _inviteTopY = 0;
+    private int _claimLabelY = 0;
+
+    // For "...and more" messaging in render()
+    private int _membersShown = 0;
+    private int _pendingShown = 0;
+
     public ManageCivScreen(S2C_OpenManageCivScreenPacket data) {
         super(Component.literal("Manage Civilization"));
         this.data = data;
@@ -45,88 +56,171 @@ public final class ManageCivScreen extends Screen {
 
     @Override
     protected void init() {
+        this.clearWidgets();
+
         int cx = this.width / 2;
         int cy = this.height / 2;
 
-        // Name + rename
-        this.nameBox = new EditBox(this.font, cx - 100, cy - 60, 200, 20, Component.literal("Civilization Name"));
+        int xLeft = cx - 100;
+        int xRightBtn = cx + 45;
+
+        int wMain = 200;
+        int hMain = 20;
+
+        int rowGap = 4;
+        int blockGap = 10;
+
+        int topMargin = 18;
+        int bottomMargin = 18;
+
+        // Reserve space for your header (title + civ stats + war line) drawn in render()
+        int headerReserve = 110;
+
+        int topY = topMargin + headerReserve;
+
+        // --- Build the bottom panel FIRST so it is always visible ---
+        boolean showWarBtn = data.isLeader && data.hasPendingWar
+                && "PROPOSED".equalsIgnoreCase(data.pendingPhase)
+                && data.pendingWarId != null;
+
+        // Bottom panel height:
+        // Claim Current Chunk (20)
+        // gap
+        // Directions cross (N row + W/E row + S row) approx 58px
+        // gap
+        // optional war (20 + gap)
+        // bottom row (20)
+        int directionsHeight = 18 + 2 + 18 + 2 + 18; // 58
+        int bottomPanelHeight =
+                hMain + rowGap +                 // Claim Current Chunk
+                        directionsHeight + blockGap +     // Directions + gap after
+                        (showWarBtn ? (hMain + blockGap) : 0) +  // Optional war + gap after
+                        hMain;                            // Disband/Close (or Leave/Close)
+
+        int bottomPanelTopY = this.height - bottomMargin - bottomPanelHeight;
+
+        // If the screen is extremely short, ensure we don't go above the top area too much
+        bottomPanelTopY = Math.max(bottomPanelTopY, topY + 40);
+
+        // --- TOP FLOW: Name box + Rename, Invite box + Invite ---
+        int y = topY;
+
+        // Name box
+        this.nameBox = new EditBox(this.font, xLeft, y, wMain, hMain, Component.literal("Civilization Name"));
         this.nameBox.setMaxLength(32);
         this.nameBox.setValue(data.civName == null ? "" : data.civName);
         this.nameBox.setEditable(data.isLeader);
         this.addRenderableWidget(this.nameBox);
 
+        y += hMain + rowGap;
+
+        // Rename button (top button)
         Button rename = Button.builder(Component.literal("Rename"), btn -> onRename())
-                .bounds(cx - 100, cy - 35, 200, 20)
+                .bounds(xLeft, y, wMain, hMain)
                 .build();
         rename.active = data.isLeader;
         this.addRenderableWidget(rename);
 
-        // Members list + kick
-        int listY = cy - 5;
-        int shown = 0;
+        y += hMain + blockGap;
 
+        // Invite label anchor for render()
+        _inviteTopY = y;
+
+        // Invite box
+        this.inviteBox = new EditBox(this.font, xLeft, y, wMain, hMain, Component.literal("Player name"));
+        this.inviteBox.setMaxLength(32);
+        this.inviteBox.setEditable(data.isLeader);
+        this.inviteBox.setValue("");
+        this.addRenderableWidget(this.inviteBox);
+
+        y += hMain + rowGap;
+
+        // Invite button
+        Button inviteBtn = Button.builder(Component.literal("Invite"), btn -> onInvite())
+                .bounds(xLeft, y, wMain, hMain)
+                .build();
+        inviteBtn.active = data.isLeader;
+        this.addRenderableWidget(inviteBtn);
+
+        y += hMain + blockGap;
+
+        // --- MIDDLE AREA: Members + Pending lists (AUTO-SHRINK to fit above bottom panel) ---
+        int listAreaTop = y;
+        int listAreaBottom = bottomPanelTopY - blockGap;
+        int listAreaHeight = Math.max(0, listAreaBottom - listAreaTop);
+
+        int pendingLabelH = 12 + 8; // label line + spacing
+        int rowH = 20;
+
+        boolean hasPending = data.pendingInvites != null && !data.pendingInvites.isEmpty();
+        int reservedForPendingLabel = hasPending ? pendingLabelH : 0;
+
+        int usableForRows = listAreaHeight - reservedForPendingLabel;
+        int totalRowsFit = usableForRows > 0 ? (usableForRows / rowH) : 0;
+
+        int membersTotal = data.members == null ? 0 : data.members.size();
+        int pendingTotal = data.pendingInvites == null ? 0 : data.pendingInvites.size();
+
+        // Show members first, then pending with remaining
+        int membersShow = Math.min(MAX_MEMBERS_SHOWN, Math.min(membersTotal, totalRowsFit));
+        int remainingRows = Math.max(0, totalRowsFit - membersShow);
+        int pendingShow = hasPending ? Math.min(MAX_PENDING_SHOWN, Math.min(pendingTotal, remainingRows)) : 0;
+
+        _membersShown = membersShow;
+        _pendingShown = pendingShow;
+
+        // Members buttons + name alignment anchors
+        _membersStartY = listAreaTop;
+
+        int listY = _membersStartY;
         UUID self = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID() : null;
 
-        for (UUID memberId : data.members) {
-            if (shown >= MAX_MEMBERS_SHOWN) break;
-
-            final UUID target = memberId;
+        for (int i = 0; i < membersShow; i++) {
+            UUID target = data.members.get(i);
 
             Button kick = Button.builder(Component.literal("Kick"), btn -> onKick(target))
-                    .bounds(cx + 45, listY, 55, 18)
+                    .bounds(xRightBtn, listY, 55, 18)
                     .build();
 
             boolean canKick = data.isLeader && self != null && !self.equals(target);
             kick.active = canKick;
             this.addRenderableWidget(kick);
 
-            listY += 20;
-            shown++;
+            listY += rowH;
         }
 
-        // Pending invites + cancel buttons
-        int invY = cy + 35;
-        int invShown = 0;
+        // Pending invites buttons + anchors
+        _pendingLabelY = listY + 8;
+        _pendingStartY = _pendingLabelY + 12;
 
-        for (UUID invitedId : data.pendingInvites) {
-            if (invShown >= MAX_PENDING_SHOWN) break;
-
-            final UUID target = invitedId;
+        int invY = _pendingStartY;
+        for (int i = 0; i < pendingShow; i++) {
+            UUID target = data.pendingInvites.get(i);
 
             Button cancel = Button.builder(Component.literal("Cancel"), btn -> onCancelInvite(target))
-                    .bounds(cx + 45, invY, 55, 18)
+                    .bounds(xRightBtn, invY, 55, 18)
                     .build();
             cancel.active = data.isLeader;
             this.addRenderableWidget(cancel);
 
-            invY += 20;
-            invShown++;
+            invY += rowH;
         }
 
-        // Invite box + Invite button (leader only)
-        this.inviteBox = new EditBox(this.font, cx - 100, cy + 90, 140, 20, Component.literal("Player name"));
-        this.inviteBox.setMaxLength(32);
-        this.inviteBox.setEditable(data.isLeader);
-        this.inviteBox.setValue("");
-        this.addRenderableWidget(this.inviteBox);
+        // --- BOTTOM PANEL (pinned): Claim + Directions + (optional war) + Disband/Close ---
+        int bpY = bottomPanelTopY;
 
-        Button inviteBtn = Button.builder(Component.literal("Invite"), btn -> onInvite())
-                .bounds(cx + 45, cy + 90, 55, 20)
-                .build();
-        inviteBtn.active = data.isLeader;
-        this.addRenderableWidget(inviteBtn);
-
-        // Claim current chunk (leader only)
+        // Claim current chunk
         Button claim = Button.builder(Component.literal("Claim Current Chunk"), btn -> onClaimCurrentChunk())
-                .bounds(cx - 100, cy + 112, 200, 20)
+                .bounds(xLeft, bpY, wMain, hMain)
                 .build();
         claim.active = data.isLeader && data.claimCredits > 0;
         this.addRenderableWidget(claim);
 
-        // NEW: Directional adjacent-only claiming buttons (leader + credits required)
-        // Layout: small cross under "Claim Current Chunk"
+        bpY += hMain + rowGap;
+
+        // Directional cross centered under claim
         int bx = cx - 25;
-        int by = cy + 135;
+        int by = bpY;
 
         Button north = Button.builder(Component.literal("N"), b -> onClaimDir(C2S_ClaimAdjacentToMonumentPacket.Dir.NORTH))
                 .bounds(bx, by, 50, 18)
@@ -152,32 +246,36 @@ public final class ManageCivScreen extends Screen {
         south.active = data.isLeader && data.claimCredits > 0;
         this.addRenderableWidget(south);
 
-        // Optional: label
-        // (We just render it as text in render())
+        // Label anchor for render() near the directions
+        _claimLabelY = by - 12;
 
-        // Pending war status button (leader only; PROPOSED only)
-        if (data.isLeader && data.hasPendingWar && "PROPOSED".equalsIgnoreCase(data.pendingPhase) && data.pendingWarId != null) {
+        bpY = by + 40 + 18 + blockGap;
+
+        // Optional war proposal button
+        if (showWarBtn) {
             Button openWar = Button.builder(Component.literal("Open War Proposal"), btn -> onOpenWarProposal())
-                    .bounds(cx - 100, cy + 185, 200, 20)
+                    .bounds(xLeft, bpY, wMain, hMain)
                     .build();
             this.addRenderableWidget(openWar);
+
+            bpY += hMain + blockGap;
         }
 
-        // Leave / Disband + Close row
+        // Disband/Leave + Close row (ALWAYS visible)
         if (data.isLeader) {
             Button disband = Button.builder(Component.literal(confirmDisband ? "Confirm Disband" : "Disband Civ"), btn -> onDisband())
-                    .bounds(cx - 100, cy + 160, 95, 20)
+                    .bounds(xLeft, bpY, 95, hMain)
                     .build();
             this.addRenderableWidget(disband);
         } else {
             Button leave = Button.builder(Component.literal("Leave Civ"), btn -> onLeave())
-                    .bounds(cx - 100, cy + 160, 95, 20)
+                    .bounds(xLeft, bpY, 95, hMain)
                     .build();
             this.addRenderableWidget(leave);
         }
 
         Button close = Button.builder(Component.literal("Close"), btn -> onClose())
-                .bounds(cx + 5, cy + 160, 95, 20)
+                .bounds(xLeft + 105, bpY, 95, hMain)
                 .build();
         this.addRenderableWidget(close);
 
@@ -228,8 +326,6 @@ public final class ManageCivScreen extends Screen {
         if (!data.isLeader) return;
 
         Network.CH.send(new C2S_ClaimCurrentChunkPacket(data.monumentPos, data.civId), PacketDistributor.SERVER.noArg());
-        // Refresh will happen via S2C_ClaimFeedbackPacket if you mirror that for current-chunk too.
-        // For now, do a local refresh request as well:
         requestRefresh();
     }
 
@@ -237,7 +333,7 @@ public final class ManageCivScreen extends Screen {
         if (!data.isLeader) return;
 
         Network.CH.send(new C2S_ClaimAdjacentToMonumentPacket(data.monumentPos, data.civId, dir), PacketDistributor.SERVER.noArg());
-        // No immediate refresh here; S2C_ClaimFeedbackPacket will refresh the UI on arrival.
+        // Refresh typically happens via S2C_ClaimFeedbackPacket; leaving as-is.
     }
 
     private void onOpenWarProposal() {
@@ -330,36 +426,52 @@ public final class ManageCivScreen extends Screen {
             gfx.drawCenteredString(this.font, "War: None", cx, y, 0x55FF55);
         }
 
-        // Members
-        int listY = (this.height / 2) - 5;
-        int shown = 0;
-        for (UUID memberId : data.members) {
-            if (shown >= MAX_MEMBERS_SHOWN) break;
+        // Invite label (above invite box)
+        gfx.drawString(this.font, "Invite player (online):", cx - 100, _inviteTopY - 12, 0xAAAAAA);
+
+        // Members list (aligned to kick buttons)
+        int listY = _membersStartY;
+        for (int i = 0; i < _membersShown; i++) {
+            UUID memberId = data.members.get(i);
             gfx.drawString(this.font, resolveName(memberId), cx - 100, listY + 5, 0xFFFFFF);
             listY += 20;
-            shown++;
+        }
+        if (data.members.size() > _membersShown) {
+            gfx.drawString(this.font, "...and " + (data.members.size() - _membersShown) + " more", cx - 100, listY + 3, 0xAAAAAA);
         }
 
         // Pending invites
-        gfx.drawString(this.font, "Pending invites:", cx - 100, (this.height / 2) + 23, 0xAAAAAA);
+        gfx.drawString(this.font, "Pending invites:", cx - 100, _pendingLabelY, 0xAAAAAA);
 
-        int invY = (this.height / 2) + 35;
-        int invShown = 0;
-        for (UUID invited : data.pendingInvites) {
-            if (invShown >= MAX_PENDING_SHOWN) break;
+        int invY = _pendingStartY;
+        for (int i = 0; i < _pendingShown; i++) {
+            UUID invited = data.pendingInvites.get(i);
             gfx.drawString(this.font, resolveName(invited), cx - 100, invY + 5, 0xFFFFFF);
             invY += 20;
-            invShown++;
+        }
+        if (data.pendingInvites.size() > _pendingShown) {
+            gfx.drawString(this.font, "...and " + (data.pendingInvites.size() - _pendingShown) + " more", cx - 100, invY + 3, 0xAAAAAA);
         }
 
-        // Invite label
-        gfx.drawString(this.font, "Invite player (online):", cx - 100, (this.height / 2) + 78, 0xAAAAAA);
-
-        // Adjacent claim label (near the N/W/E/S buttons)
-        gfx.drawString(this.font, "Claim Adjacent:", cx - 100, (this.height / 2) + 132, 0xAAAAAA);
+        // Claim Adjacent label near N/W/E/S (pinned area)
+        gfx.drawString(this.font, "Claim Adjacent:", cx - 100, _claimLabelY, 0xAAAAAA);
 
         if (confirmDisband) {
-            gfx.drawString(this.font, "Click Confirm Disband to permanently delete this civ.", cx - 100, (this.height / 2) + 185, 0xFF5555);
+            int warnX = cx - 100;
+            int warnMaxW = 200;
+
+            // Put warning in a visible area above the bottom buttons
+            int warnY = Math.min(this.height - 80, invY + 50);
+
+            var lines = this.font.split(
+                    Component.literal("Click Confirm Disband to permanently delete this civ."),
+                    warnMaxW
+            );
+
+            for (var line : lines) {
+                gfx.drawString(this.font, line, warnX, warnY, 0xFF5555);
+                warnY += this.font.lineHeight;
+            }
         }
 
         super.render(gfx, mouseX, mouseY, partialTicks);
